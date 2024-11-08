@@ -55,6 +55,7 @@ mod regexp_object;
 mod responder_object;
 mod script_object;
 mod shader_data_object;
+mod shape;
 mod shared_object_object;
 mod socket_object;
 mod sound_object;

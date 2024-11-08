@@ -18,14 +18,18 @@ use gc_arena::{
 use std::cell::{Ref, RefMut};
 use std::fmt::Debug;
 
+use super::shape::Shape;
+
 /// A class instance allocator that allocates `ScriptObject`s.
 pub fn scriptobject_allocator<'gc>(
     class: ClassObject<'gc>,
     activation: &mut Activation<'_, 'gc>,
 ) -> Result<Object<'gc>, Error<'gc>> {
+    let mc = activation.context.gc_context;
+
     let base = ScriptObjectData::new(class);
 
-    Ok(ScriptObject(Gc::new(activation.context.gc_context, base)).into())
+    Ok(ScriptObject(Gc::new(mc, base)).into())
 }
 
 /// Default implementation of `avm2::Object`.
@@ -46,6 +50,9 @@ pub struct ScriptObjectWeak<'gc>(pub GcWeak<'gc, ScriptObjectData<'gc>>);
 #[collect(no_drop)]
 #[repr(align(8))]
 pub struct ScriptObjectData<'gc> {
+    /// Hidden class for this object.
+    shape: RefLock<Shape<'gc>>,
+
     /// Values stored on this object.
     values: RefLock<DynamicMap<DynamicKey<'gc>, Value<'gc>>>,
 
@@ -150,7 +157,7 @@ impl<'gc> ScriptObjectData<'gc> {
         proto: Option<Object<'gc>>,
         vtable: VTable<'gc>,
     ) -> Self {
-        let default_slots = vtable.default_slots();
+        let default_slots: Ref<'_, Vec<Option<Value<'_>>>> = vtable.default_slots();
         let mut slots = vec![Lock::new(Value::Undefined); default_slots.len()];
 
         for (i, value) in default_slots.iter().enumerate() {
@@ -159,7 +166,10 @@ impl<'gc> ScriptObjectData<'gc> {
             }
         }
 
+        let shape = Shape::new();
+
         ScriptObjectData {
+            shape: RefLock::new(shape),
             values: RefLock::new(Default::default()),
             slots,
             bound_methods: RefLock::new(Vec::new()),
