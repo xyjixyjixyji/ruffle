@@ -10,7 +10,7 @@ use gc_arena::{Collect, Gc};
 
 use super::class::Class;
 
-#[derive(Debug, Collect, Clone, Copy)]
+#[derive(Debug, Collect, Clone, Copy, PartialEq)]
 #[collect(no_drop)]
 pub enum Property {
     Virtual { get: Option<u32>, set: Option<u32> },

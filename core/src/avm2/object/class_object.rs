@@ -26,6 +26,8 @@ use gc_arena::{
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 
+use super::Shape;
+
 /// An Object which can be called to execute its function code.
 #[derive(Collect, Clone, Copy)]
 #[collect(no_drop)]
@@ -258,7 +260,9 @@ impl<'gc> ClassObject<'gc> {
             activation.context.gc_context,
         );
 
-        self.set_vtable(activation.context.gc_context, class_vtable);
+        let mc = activation.context.gc_context;
+        self.set_vtable(mc, class_vtable);
+        self.set_shape(mc, Shape::new(mc, &class_vtable));
 
         self.run_class_initializer(activation)?;
 

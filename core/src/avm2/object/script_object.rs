@@ -50,9 +50,6 @@ pub struct ScriptObjectWeak<'gc>(pub GcWeak<'gc, ScriptObjectData<'gc>>);
 #[collect(no_drop)]
 #[repr(align(8))]
 pub struct ScriptObjectData<'gc> {
-    /// Hidden class for this object.
-    shape: RefLock<Shape<'gc>>,
-
     /// Values stored on this object.
     values: RefLock<DynamicMap<DynamicKey<'gc>, Value<'gc>>>,
 
@@ -70,6 +67,9 @@ pub struct ScriptObjectData<'gc> {
 
     /// The table used for non-dynamic property lookups.
     vtable: Lock<VTable<'gc>>,
+
+    /// Shape of this object
+    shape: Lock<Option<Shape<'gc>>>,
 }
 
 impl<'gc> TObject<'gc> for ScriptObject<'gc> {
@@ -166,16 +166,14 @@ impl<'gc> ScriptObjectData<'gc> {
             }
         }
 
-        let shape = Shape::new();
-
         ScriptObjectData {
-            shape: RefLock::new(shape),
             values: RefLock::new(Default::default()),
             slots,
             bound_methods: RefLock::new(Vec::new()),
             proto: Lock::new(proto),
             instance_class,
             vtable: Lock::new(vtable),
+            shape: Lock::new(None),
         }
     }
 }
@@ -447,6 +445,10 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         );
 
         unlock!(Gc::write(mc, self.0), ScriptObjectData, vtable).set(vtable);
+    }
+
+    pub fn set_shape(&self, mc: &Mutation<'gc>, shape: Shape<'gc>) {
+        unlock!(Gc::write(mc, self.0), ScriptObjectData, shape).set(Some(shape));
     }
 
     pub fn debug_class_name(&self) -> Box<dyn std::fmt::Debug + 'gc> {

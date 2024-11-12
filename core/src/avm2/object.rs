@@ -129,6 +129,7 @@ pub use crate::avm2::object::script_object::{
 pub use crate::avm2::object::shader_data_object::{
     shader_data_allocator, ShaderDataObject, ShaderDataObjectWeak,
 };
+pub use crate::avm2::object::shape::Shape;
 pub use crate::avm2::object::shared_object_object::{
     shared_object_allocator, SharedObjectObject, SharedObjectObjectWeak,
 };
@@ -1113,6 +1114,12 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn set_vtable(&self, mc: &Mutation<'gc>, vtable: VTable<'gc>) {
         let base = self.base();
         base.set_vtable(mc, vtable);
+    }
+
+    #[no_dynamic]
+    fn set_shape(&self, mc: &Mutation<'gc>, shape: Shape<'gc>) {
+        let base = self.base();
+        base.set_shape(mc, shape);
     }
 
     /// Try to corece this object into a `ClassObject`.
