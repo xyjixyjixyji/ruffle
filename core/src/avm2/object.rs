@@ -247,6 +247,10 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         multiname: &Multiname<'gc>,
         activation: &mut Activation<'_, 'gc>,
     ) -> Result<Value<'gc>, Error<'gc>> {
+        if multiname.local_name() == Some(AvmString::new_utf8(activation.context.gc_context, "age"))
+        {
+            tracing::info!("shape: {:?}", self.base().shape());
+        }
         match self.vtable().get_trait(multiname) {
             Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
                 Ok(self.base().get_slot(slot_id))

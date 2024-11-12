@@ -27,7 +27,9 @@ pub fn scriptobject_allocator<'gc>(
 ) -> Result<Object<'gc>, Error<'gc>> {
     let mc = activation.context.gc_context;
 
-    let base = ScriptObjectData::new(class);
+    let mut base = ScriptObjectData::new(class);
+    let shape = Shape::new(mc, &base.vtable.get());
+    base.set_shape(shape);
 
     Ok(ScriptObject(Gc::new(mc, base)).into())
 }
@@ -175,6 +177,11 @@ impl<'gc> ScriptObjectData<'gc> {
             vtable: Lock::new(vtable),
             shape: Lock::new(None),
         }
+    }
+
+    pub fn set_shape(&mut self, shape: Shape<'gc>) {
+        let s = self.shape.get_mut();
+        *s = Some(shape);
     }
 }
 
@@ -431,6 +438,11 @@ impl<'gc> ScriptObjectWrapper<'gc> {
     /// Get the vtable for this object, if it has one.
     pub fn vtable(&self) -> VTable<'gc> {
         self.0.vtable.get()
+    }
+
+    /// Get the shape of this object, if it has one.
+    pub fn shape(&self) -> Option<Shape<'gc>> {
+        self.0.shape.get()
     }
 
     pub fn is_sealed(&self) -> bool {
