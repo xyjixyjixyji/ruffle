@@ -18,7 +18,7 @@ use gc_arena::{
 use std::cell::{Ref, RefMut};
 use std::fmt::Debug;
 
-use super::shape::Shape;
+use super::shape::{PropertyInfo, PropertyType, Shape};
 
 /// A class instance allocator that allocates `ScriptObject`s.
 pub fn scriptobject_allocator<'gc>(
@@ -71,7 +71,7 @@ pub struct ScriptObjectData<'gc> {
     vtable: Lock<VTable<'gc>>,
 
     /// Shape of this object
-    shape: Lock<Option<Shape<'gc>>>,
+    shape: RefLock<Option<Shape<'gc>>>,
 }
 
 impl<'gc> TObject<'gc> for ScriptObject<'gc> {
@@ -175,7 +175,7 @@ impl<'gc> ScriptObjectData<'gc> {
             proto: Lock::new(proto),
             instance_class,
             vtable: Lock::new(vtable),
-            shape: Lock::new(None),
+            shape: RefLock::new(None),
         }
     }
 
@@ -296,6 +296,16 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         // Unbelievably cursed special case in avmplus:
         // https://github.com/adobe/avmplus/blob/858d034a3bd3a54d9b70909386435cf4aec81d21/core/ScriptObject.cpp#L311-L315
         let key = maybe_int_property(local_name);
+
+        // update the shape
+        let shape_mut = self.shape_mut(activation.gc());
+        if let Some(shape) = *shape_mut {
+            shape.add_property(PropertyInfo::new(
+                local_name,
+                multiname.namespace_set().to_vec(),
+                PropertyType::Value(value),
+            ));
+        }
 
         self.values_mut(activation.gc()).insert(key, value);
         Ok(())
@@ -441,8 +451,12 @@ impl<'gc> ScriptObjectWrapper<'gc> {
     }
 
     /// Get the shape of this object, if it has one.
-    pub fn shape(&self) -> Option<Shape<'gc>> {
-        self.0.shape.get()
+    pub fn shape(&self) -> Ref<Option<Shape<'gc>>> {
+        self.0.shape.borrow()
+    }
+
+    pub fn shape_mut(&self, mc: &Mutation<'gc>) -> RefMut<Option<Shape<'gc>>> {
+        unlock!(Gc::write(mc, self.0), ScriptObjectData, shape).borrow_mut()
     }
 
     pub fn is_sealed(&self) -> bool {
@@ -460,7 +474,7 @@ impl<'gc> ScriptObjectWrapper<'gc> {
     }
 
     pub fn set_shape(&self, mc: &Mutation<'gc>, shape: Shape<'gc>) {
-        unlock!(Gc::write(mc, self.0), ScriptObjectData, shape).set(Some(shape));
+        *self.shape_mut(mc) = Some(shape);
     }
 
     pub fn debug_class_name(&self) -> Box<dyn std::fmt::Debug + 'gc> {

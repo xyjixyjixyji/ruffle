@@ -13,7 +13,7 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use swf::avm2::types::{Index, Multiname as AbcMultiname, NamespaceSet as AbcNamespaceSet};
 
-#[derive(Clone, Copy, Debug, Collect)]
+#[derive(Clone, Copy, Debug, Collect, PartialEq)]
 #[collect(no_drop)]
 pub enum NamespaceSet<'gc> {
     Multiple(Gc<'gc, Vec<Namespace<'gc>>>),

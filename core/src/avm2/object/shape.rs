@@ -1,16 +1,37 @@
 use gc_arena::{Collect, GcCell, Mutation};
 
 use crate::{
-    avm2::{property::Property, vtable::VTable, Namespace},
+    avm2::{property::Property, vtable::VTable, Namespace, Value},
     string::AvmString,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Collect)]
+#[derive(Debug, Clone, PartialEq, Collect)]
+#[collect(no_drop)]
+pub enum PropertyType<'gc> {
+    Property(Property),
+    Value(Value<'gc>),
+}
+
+#[derive(Debug, Clone, PartialEq, Collect)]
 #[collect(no_drop)]
 pub struct PropertyInfo<'gc> {
     name: AvmString<'gc>,
-    ns: Namespace<'gc>,
-    property: Property,
+    ns: Vec<Namespace<'gc>>,
+    property: PropertyType<'gc>,
+}
+
+impl<'gc> PropertyInfo<'gc> {
+    pub fn new(name: AvmString<'gc>, ns: Vec<Namespace<'gc>>, property: PropertyType<'gc>) -> Self {
+        Self { name, ns, property }
+    }
+
+    pub fn name(&self) -> AvmString<'gc> {
+        self.name
+    }
+
+    pub fn ns(&self) -> &[Namespace<'gc>] {
+        &self.ns
+    }
 }
 
 /// Hidden class for 'ScriptObject'
@@ -45,11 +66,29 @@ impl<'gc> Shape<'gc> {
                     .iter()
                     .map(|(name, ns, property)| PropertyInfo {
                         name: name.clone(),
-                        ns: ns.clone(),
-                        property: *property,
+                        ns: vec![ns],
+                        property: PropertyType::Property(*property),
                     })
                     .collect(),
             },
         ))
+    }
+
+    // TODO: add a check for duplicate name and namespace to prevent duplicate adds
+    pub fn add_property(&self, property: PropertyInfo<'gc>) {
+        let properties = unsafe { &mut self.0.borrow_mut().properties };
+
+        // Check if property with same name exists
+        if let Some(existing) = properties.iter_mut().find(|p| p.name == property.name) {
+            // If the namespace is not in the list, add it
+            for ns in property.ns {
+                if !existing.ns.contains(&ns) {
+                    existing.ns.push(ns);
+                }
+            }
+        } else {
+            // If no matching property exists, add the new one
+            properties.push(property);
+        }
     }
 }

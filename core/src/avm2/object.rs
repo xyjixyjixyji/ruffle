@@ -23,6 +23,7 @@ use crate::streams::NetStream;
 use crate::string::{AvmString, StringContext};
 use gc_arena::{Collect, Gc, Mutation};
 use ruffle_macros::enum_trait_object;
+use shape::{PropertyInfo, PropertyType};
 use std::cell::{Ref, RefMut};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
@@ -249,7 +250,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     ) -> Result<Value<'gc>, Error<'gc>> {
         if multiname.local_name() == Some(AvmString::new_utf8(activation.context.gc_context, "age"))
         {
-            tracing::info!("shape: {:?}", self.base().shape());
+            tracing::info!("shape: {:#?}", self.base().shape());
         }
         match self.vtable().get_trait(multiname) {
             Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
@@ -354,12 +355,21 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     ) -> Result<(), Error<'gc>> {
         match self.vtable().get_trait(multiname) {
             Some(Property::Slot { slot_id }) => {
+                let base = self.base();
+                let shape = base.shape_mut(activation.context.gc_context);
+                if let Some(shape) = *shape {
+                    shape.add_property(PropertyInfo::new(
+                        multiname.local_name().unwrap(),
+                        multiname.namespace_set().to_vec(),
+                        PropertyType::Property(Property::Slot { slot_id }),
+                    ));
+                }
+
                 let value = self
                     .vtable()
                     .coerce_trait_value(slot_id, value, activation)?;
 
-                self.base()
-                    .set_slot(slot_id, value, activation.context.gc_context);
+                base.set_slot(slot_id, value, activation.context.gc_context);
 
                 Ok(())
             }
