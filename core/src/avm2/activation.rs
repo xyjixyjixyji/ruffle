@@ -27,6 +27,7 @@ use gc_arena::Gc;
 use smallvec::SmallVec;
 use std::cmp::{min, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 use swf::avm2::types::{
     Exception, Index, Method as AbcMethod, MethodFlags as AbcMethodFlags, Namespace as AbcNamespace,
 };
@@ -812,6 +813,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         avm_debug!(self.avm2(), "Opcode: {op:?}");
 
         {
+            let begin = Instant::now();
             let result = match op {
                 Op::PushByte { value } => self.op_push_byte(*value),
                 Op::PushDouble { value } => self.op_push_double(*value),
@@ -1013,6 +1015,11 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
             if let Err(error) = result {
                 return self.handle_err(method, error);
+            }
+
+            let elapsed = begin.elapsed();
+            if matches!(op, Op::GetProperty { .. }) {
+                tracing::info!("Opcode {op:?} took {} ns", elapsed.as_nanos());
             }
             result
         }
