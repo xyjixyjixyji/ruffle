@@ -1,7 +1,9 @@
+use std::borrow::Borrow;
+
 use gc_arena::{Collect, GcCell, Mutation};
 
 use crate::{
-    avm2::{property::Property, vtable::VTable, Namespace, Value},
+    avm2::{property::Property, vtable::VTable, Multiname, Namespace, Value},
     string::AvmString,
 };
 
@@ -31,6 +33,10 @@ impl<'gc> PropertyInfo<'gc> {
 
     pub fn ns(&self) -> &[Namespace<'gc>] {
         &self.ns
+    }
+
+    pub fn property(&self) -> &PropertyType<'gc> {
+        &self.property
     }
 }
 
@@ -65,7 +71,7 @@ impl<'gc> Shape<'gc> {
                     .resolved_traits()
                     .iter()
                     .map(|(name, ns, property)| PropertyInfo {
-                        name: name.clone(),
+                        name,
                         ns: vec![ns],
                         property: PropertyType::Property(*property),
                     })
@@ -74,7 +80,6 @@ impl<'gc> Shape<'gc> {
         ))
     }
 
-    // TODO: add a check for duplicate name and namespace to prevent duplicate adds
     pub fn add_property(&self, property: PropertyInfo<'gc>) {
         let properties = unsafe { &mut self.0.borrow_mut().properties };
 
@@ -90,5 +95,22 @@ impl<'gc> Shape<'gc> {
             // If no matching property exists, add the new one
             properties.push(property);
         }
+    }
+
+    pub fn get_for_multiname(&self, multiname: &Multiname<'gc>) -> Option<PropertyInfo<'gc>> {
+        let shape = &self.0.borrow().read().properties;
+        for property in shape {
+            if property.name == multiname.local_name().expect("multiname has no local name") {
+                // check if the namespace set is contained in the property's namespace set
+                if property
+                    .ns
+                    .iter()
+                    .any(|ns| multiname.namespace_set().contains(ns))
+                {
+                    return Some(property.clone());
+                }
+            }
+        }
+        None
     }
 }

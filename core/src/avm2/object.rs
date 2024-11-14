@@ -248,13 +248,39 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         multiname: &Multiname<'gc>,
         activation: &mut Activation<'_, 'gc>,
     ) -> Result<Value<'gc>, Error<'gc>> {
-        if multiname.local_name() == Some(AvmString::new_utf8(activation.context.gc_context, "age"))
-        {
-            tracing::info!("shape: {:#?}", self.base().shape());
+        let base = self.base();
+
+        // Fast path by checking in the shape
+        let shape = base.shape();
+        if let Some(shape) = *shape {
+            if let Some(property) = shape.get_for_multiname(multiname) {
+                match property.property() {
+                    PropertyType::Property(p) => match p {
+                        Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
+                            return Ok(base.get_slot(*slot_id));
+                        }
+                        Property::Virtual { get: Some(get), .. } => {
+                            return self.call_method(*get, &[], activation);
+                        }
+                        Property::Method { disp_id } => {
+                            // TODO: handle other cases, prevent fall thru
+                            if let Some(bound_method) = self.get_bound_method(*disp_id) {
+                                return Ok(bound_method.into());
+                            }
+                        }
+                        _ => {} // Virtual { get: None, .. }
+                    },
+                    PropertyType::Value(v) => {
+                        return Ok(*v);
+                    }
+                }
+            }
         }
+
+        // TODO: remove most of things below if shape is finalized
         match self.vtable().get_trait(multiname) {
             Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
-                Ok(self.base().get_slot(slot_id))
+                Ok(base.get_slot(slot_id))
             }
             Some(Property::Method { disp_id }) => {
                 // avmplus has a special case for XML and XMLList objects, so we need one as well
