@@ -253,27 +253,10 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         // Fast path by checking in the shape
         let shape = base.shape();
         if let Some(shape) = *shape {
-            if let Some(property) = shape.get_for_multiname(multiname) {
-                match property.property() {
-                    PropertyType::Property(p) => match p {
-                        Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
-                            return Ok(base.get_slot(*slot_id));
-                        }
-                        Property::Virtual { get: Some(get), .. } => {
-                            return self.call_method(*get, &[], activation);
-                        }
-                        Property::Method { disp_id } => {
-                            // TODO: handle other cases, prevent fall thru
-                            if let Some(bound_method) = self.get_bound_method(*disp_id) {
-                                return Ok(bound_method.into());
-                            }
-                        }
-                        _ => {} // Virtual { get: None, .. }
-                    },
-                    PropertyType::Value(v) => {
-                        return Ok(*v);
-                    }
-                }
+            if let Some(value_result) =
+                self.try_get_property_by_shape(activation, multiname, &shape)
+            {
+                return value_result;
             }
         }
 
@@ -334,6 +317,43 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// `None` when the lookup needs to be forwarded to the base or throw.
     fn get_index_property(self, _index: usize) -> Option<Value<'gc>> {
         None
+    }
+
+    /// Purely an optimization for "array-like" access using hidden class (shape).
+    ///
+    /// This should return `None` when the lookup needs to be forwarded to the
+    /// dictionary-like lookup or prototype chain lookup.
+    fn try_get_property_by_shape(
+        self,
+        activation: &mut Activation<'_, 'gc>,
+        multiname: &Multiname<'gc>,
+        shape: &Shape<'gc>,
+    ) -> Option<Result<Value<'gc>, Error<'gc>>> {
+        let base = self.base();
+        if let Some(property) = shape.get_for_multiname(multiname) {
+            match property.property() {
+                PropertyType::Property(p) => match p {
+                    Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
+                        Some(Ok(base.get_slot(*slot_id)))
+                    }
+                    Property::Virtual { get: Some(get), .. } => {
+                        Some(self.call_method(*get, &[], activation))
+                    }
+                    Property::Method { disp_id } => {
+                        // TODO: handle other cases, prevent fall thru
+                        if let Some(bound_method) = self.get_bound_method(*disp_id) {
+                            Some(Ok(bound_method.into()))
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None, // Virtual { get: None, .. }
+                },
+                PropertyType::Value(v) => Some(Ok(*v)),
+            }
+        } else {
+            None
+        }
     }
 
     /// Set a local property of the object. The Multiname should always be public.
