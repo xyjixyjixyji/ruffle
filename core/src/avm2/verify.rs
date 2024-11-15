@@ -946,10 +946,7 @@ fn resolve_op<'gc>(
         AbcOp::GetProperty { index } => {
             let multiname = pool_multiname(activation, translation_unit, index)?;
 
-            Op::GetProperty {
-                multiname,
-                ic: InlineCache::new(),
-            }
+            Op::GetProperty { multiname }
         }
         AbcOp::SetProperty { index } => {
             let multiname = pool_multiname(activation, translation_unit, index)?;

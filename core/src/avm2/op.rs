@@ -153,7 +153,6 @@ pub enum Op<'gc> {
     },
     GetProperty {
         multiname: Gc<'gc, Multiname<'gc>>,
-        ic: InlineCache<'gc, Property>,
     },
     GetScopeObject {
         index: u8,

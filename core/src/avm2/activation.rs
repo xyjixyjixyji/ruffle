@@ -78,6 +78,11 @@ pub struct Activation<'a, 'gc: 'a> {
     /// The instruction index.
     ip: i32,
 
+    /// The inline cache for the current activation.
+    ///
+    /// indexed by ip
+    ic: Vec<Option<Box<InlineCache<'gc, Property>>>>,
+
     /// Amount of actions performed since the last timeout check
     actions_since_timeout_check: u16,
 
@@ -166,6 +171,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
         Self {
             ip: 0,
+            ic: Vec::new(),
             actions_since_timeout_check: 0,
             local_registers,
             outer: ScopeChain::new(context.avm2.stage_domain),
@@ -194,6 +200,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
         Self {
             ip: 0,
+            ic: Vec::new(),
             actions_since_timeout_check: 0,
             local_registers,
             outer: ScopeChain::new(context.avm2.stage_domain),
@@ -255,6 +262,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
         let mut created_activation = Self {
             ip: 0,
+            ic: Vec::new(),
             actions_since_timeout_check: 0,
             local_registers,
             outer: ScopeChain::new(domain),
@@ -531,6 +539,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
         Self {
             ip: 0,
+            ic: Vec::new(),
             actions_since_timeout_check: 0,
             local_registers,
             outer,
@@ -866,7 +875,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
                 Op::ReturnValue => self.op_return_value(method),
                 Op::ReturnValueNoCoerce => self.op_return_value_no_coerce(),
                 Op::ReturnVoid => self.op_return_void(),
-                Op::GetProperty { multiname, ic } => self.op_get_property(*multiname, ic),
+                Op::GetProperty { multiname } => self.op_get_property(*multiname),
                 Op::SetProperty { multiname } => self.op_set_property(*multiname),
                 Op::InitProperty { multiname } => self.op_init_property(*multiname),
                 Op::DeleteProperty { multiname } => self.op_delete_property(*multiname),
@@ -1308,22 +1317,24 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn op_get_property(
         &mut self,
         multiname: Gc<'gc, Multiname<'gc>>,
-        ic: &InlineCache<'gc, Property>,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         // default path for static names
         if !multiname.has_lazy_component() {
             let object = self.pop_stack();
             let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
-            if let Some(value) = ic.lookup_value_with_object(object, self)? {
-                // ic lookup
-                self.push_stack(value);
-                return Ok(FrameControl::Continue);
-            } else {
-                let value = object.get_property(&multiname, self)?;
-                self.push_stack(value);
-                return Ok(FrameControl::Continue);
+            let ic_entry = self.ic.get_mut(self.ip as usize);
+            if let Some(Some(ic)) = ic_entry {
+                let ic = ic.clone();
+                if let Some(value) = ic.lookup_value_with_object(object, self)? {
+                    self.push_stack(value);
+                    return Ok(FrameControl::Continue);
+                }
             }
+
+            let value = object.get_property(&multiname, self)?;
+            self.push_stack(value);
+            return Ok(FrameControl::Continue);
         }
 
         // (fast) side path for dictionary/array-likes
