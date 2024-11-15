@@ -159,8 +159,6 @@ pub use crate::avm2::object::xml_list_object::{
 pub use crate::avm2::object::xml_object::{xml_allocator, XmlObject, XmlObjectWeak};
 use crate::font::Font;
 
-use super::inline_cache::InlineCache;
-
 /// Represents an object that can be directly interacted with by the AVM2
 /// runtime.
 #[enum_trait_object(
@@ -252,7 +250,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     ) -> Result<Value<'gc>, Error<'gc>> {
         let base = self.base();
 
-        // Fast path by checking in the shape
+        // Fast path by checking in the shape, ic update happens here.
+        // Note that only ic misses will reach this function.
         let shape = base.shape();
         if let Some(shape) = *shape {
             if let Some(value_result) =
@@ -334,23 +333,35 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         let base = self.base();
         if let Some(property) = shape.get_for_multiname(multiname) {
             match property.property() {
-                PropertyType::Property(p) => match p {
-                    Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
-                        Some(Ok(base.get_slot(*slot_id)))
+                PropertyType::Property(p) => {
+                    // update ic
+                    let ic = activation.get_ic_mut(activation.ip());
+                    if let Some(ic) = ic {
+                        ic.insert(*shape, *p);
+                    } else {
+                        activation.init_ic_on_ip(activation.ip());
+                        let ic = activation.get_ic_mut(activation.ip()).unwrap();
+                        ic.insert(*shape, *p);
                     }
-                    Property::Virtual { get: Some(get), .. } => {
-                        Some(self.call_method(*get, &[], activation))
-                    }
-                    Property::Method { disp_id } => {
-                        // TODO: handle other cases, prevent fall thru
-                        if let Some(bound_method) = self.get_bound_method(*disp_id) {
-                            Some(Ok(bound_method.into()))
-                        } else {
-                            None
+
+                    match p {
+                        Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
+                            Some(Ok(base.get_slot(*slot_id)))
                         }
+                        Property::Virtual { get: Some(get), .. } => {
+                            Some(self.call_method(*get, &[], activation))
+                        }
+                        Property::Method { disp_id } => {
+                            // TODO: handle other cases, prevent fall thru
+                            if let Some(bound_method) = self.get_bound_method(*disp_id) {
+                                Some(Ok(bound_method.into()))
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None, // Virtual { get: None, .. }
                     }
-                    _ => None, // Virtual { get: None, .. }
-                },
+                }
                 PropertyType::Value(v) => Some(Ok(*v)),
             }
         } else {

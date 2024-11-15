@@ -18,8 +18,6 @@ use swf::avm2::types::{
 };
 use swf::error::Error as AbcReadError;
 
-use super::inline_cache::InlineCache;
-
 #[derive(Collect)]
 #[collect(no_drop)]
 pub struct VerifiedMethodInfo<'gc> {

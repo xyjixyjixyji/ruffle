@@ -5,7 +5,7 @@ use gc_arena::Collect;
 
 const IC_SIZE: usize = 4;
 
-#[derive(Debug, Clone, Collect)]
+#[derive(Debug, Clone, Collect, Default)]
 #[collect(no_drop)]
 pub struct InlineCache<'gc, V>
 where
@@ -47,9 +47,7 @@ impl<'gc> InlineCache<'gc, Property> {
     {
         let base = object.base();
         let shape = base.shape();
-        let property = shape
-            .and_then(|shape| self.lookup(&shape))
-            .map(|property| property.clone());
+        let property = shape.and_then(|shape| self.lookup(&shape)).copied();
 
         if let Some(property) = property {
             match property {

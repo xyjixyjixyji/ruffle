@@ -51,7 +51,7 @@ impl<'gc> PropertyInfo<'gc> {
 #[collect(no_drop)]
 pub struct Shape<'gc>(GcCell<'gc, ShapeData<'gc>>);
 
-impl<'gc> PartialEq for Shape<'gc> {
+impl PartialEq for Shape<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.0.borrow().read().properties == other.0.borrow().read().properties
     }

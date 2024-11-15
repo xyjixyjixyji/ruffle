@@ -1201,7 +1201,6 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         let receiver = self
             .pop_stack()
             .coerce_to_object_or_typeerror(self, Some(&multiname))?;
-        // TODO: pass ic
         let function = receiver.get_property(&multiname, self)?.as_callable(
             self,
             Some(&multiname),
@@ -1323,8 +1322,9 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             let object = self.pop_stack();
             let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
-            let ic_entry = self.ic.get_mut(self.ip as usize);
-            if let Some(Some(ic)) = ic_entry {
+            let ip = self.ip;
+            let ic_entry = self.get_ic_mut(ip);
+            if let Some(ic) = ic_entry {
                 let ic = ic.clone();
                 if let Some(value) = ic.lookup_value_with_object(object, self)? {
                     self.push_stack(value);
@@ -3157,5 +3157,31 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn op_throw(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         let error_val = self.pop_stack();
         Err(Error::AvmError(error_val))
+    }
+
+    pub fn get_ic(&self, ip: i32) -> Option<&InlineCache<'gc, Property>> {
+        self.ic
+            .get(ip as usize)
+            .and_then(|ic| ic.as_ref().map(|ic| ic.as_ref()))
+    }
+
+    pub fn get_ic_mut(&mut self, ip: i32) -> Option<&mut Box<InlineCache<'gc, Property>>> {
+        let ic_entry = self.ic.get_mut(ip as usize);
+        if let Some(Some(ic)) = ic_entry {
+            Some(ic)
+        } else {
+            None
+        }
+    }
+
+    pub fn init_ic_on_ip(&mut self, ip: i32) {
+        if self.ic.len() <= ip as usize {
+            self.ic.resize(ip as usize + 1, None);
+        }
+        self.ic[ip as usize] = Some(Box::new(InlineCache::new()));
+    }
+
+    pub fn ip(&self) -> i32 {
+        self.ip
     }
 }
