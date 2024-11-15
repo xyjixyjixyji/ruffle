@@ -33,6 +33,8 @@ use swf::avm2::types::{
 };
 
 use super::error::make_mismatch_error;
+use super::inline_cache::InlineCache;
+use super::property::Property;
 
 /// Represents a particular register set.
 ///
@@ -864,7 +866,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
                 Op::ReturnValue => self.op_return_value(method),
                 Op::ReturnValueNoCoerce => self.op_return_value_no_coerce(),
                 Op::ReturnVoid => self.op_return_void(),
-                Op::GetProperty { multiname } => self.op_get_property(*multiname),
+                Op::GetProperty { multiname, ic } => self.op_get_property(*multiname, ic),
                 Op::SetProperty { multiname } => self.op_set_property(*multiname),
                 Op::InitProperty { multiname } => self.op_init_property(*multiname),
                 Op::DeleteProperty { multiname } => self.op_delete_property(*multiname),
@@ -1190,6 +1192,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         let receiver = self
             .pop_stack()
             .coerce_to_object_or_typeerror(self, Some(&multiname))?;
+        // TODO: pass ic
         let function = receiver.get_property(&multiname, self)?.as_callable(
             self,
             Some(&multiname),
@@ -1305,14 +1308,22 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn op_get_property(
         &mut self,
         multiname: Gc<'gc, Multiname<'gc>>,
+        ic: &InlineCache<'gc, Property>,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         // default path for static names
         if !multiname.has_lazy_component() {
             let object = self.pop_stack();
             let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
-            let value = object.get_property(&multiname, self)?;
-            self.push_stack(value);
-            return Ok(FrameControl::Continue);
+
+            if let Some(value) = ic.lookup_value_with_object(object, self)? {
+                // ic lookup
+                self.push_stack(value);
+                return Ok(FrameControl::Continue);
+            } else {
+                let value = object.get_property(&multiname, self)?;
+                self.push_stack(value);
+                return Ok(FrameControl::Continue);
+            }
         }
 
         // (fast) side path for dictionary/array-likes

@@ -18,6 +18,8 @@ use swf::avm2::types::{
 };
 use swf::error::Error as AbcReadError;
 
+use super::inline_cache::InlineCache;
+
 #[derive(Collect)]
 #[collect(no_drop)]
 pub struct VerifiedMethodInfo<'gc> {
@@ -944,7 +946,10 @@ fn resolve_op<'gc>(
         AbcOp::GetProperty { index } => {
             let multiname = pool_multiname(activation, translation_unit, index)?;
 
-            Op::GetProperty { multiname }
+            Op::GetProperty {
+                multiname,
+                ic: InlineCache::new(),
+            }
         }
         AbcOp::SetProperty { index } => {
             let multiname = pool_multiname(activation, translation_unit, index)?;

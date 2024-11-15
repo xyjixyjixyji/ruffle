@@ -1297,7 +1297,7 @@ pub fn optimize<'gc>(
                     stack.pop(activation)?;
                     stack.pop(activation)?;
                 }
-                Op::GetProperty { multiname } => {
+                Op::GetProperty { multiname, .. } => {
                     let mut stack_push_done = false;
                     stack.pop_for_multiname(activation, *multiname)?;
                     let stack_value = stack.pop(activation)?;

@@ -51,7 +51,13 @@ impl<'gc> PropertyInfo<'gc> {
 #[collect(no_drop)]
 pub struct Shape<'gc>(GcCell<'gc, ShapeData<'gc>>);
 
-#[derive(Debug, Clone, Collect)]
+impl<'gc> PartialEq for Shape<'gc> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.borrow().read().properties == other.0.borrow().read().properties
+    }
+}
+
+#[derive(Debug, Clone, Collect, PartialEq)]
 #[collect(no_drop)]
 pub struct ShapeData<'gc> {
     /// Properties in this shape, keyed by local name, value is the slot id.

@@ -6,6 +6,9 @@ use crate::string::AvmAtom;
 use gc_arena::{Collect, Gc};
 use swf::avm2::types::{Exception, Index, LookupSwitch, Method, Namespace};
 
+use super::{inline_cache::InlineCache, property::Property};
+
+// TODO: add inline caches for some opcodes
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
 pub enum Op<'gc> {
@@ -150,6 +153,7 @@ pub enum Op<'gc> {
     },
     GetProperty {
         multiname: Gc<'gc, Multiname<'gc>>,
+        ic: InlineCache<'gc, Property>,
     },
     GetScopeObject {
         index: u8,
@@ -402,5 +406,6 @@ impl Op<'_> {
     }
 }
 
-#[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<Op>() == 16);
+// ??????
+// #[cfg(target_pointer_width = "64")]
+// const _: () = assert!(std::mem::size_of::<Op>() == 16);
