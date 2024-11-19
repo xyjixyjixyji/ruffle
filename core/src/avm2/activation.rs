@@ -81,7 +81,7 @@ pub struct Activation<'a, 'gc: 'a> {
     /// The inline cache for the current activation.
     ///
     /// indexed by ip
-    ic: Vec<Option<Box<InlineCache<'gc, Property>>>>,
+    ic: Vec<Option<InlineCache<'gc, Property>>>,
 
     /// Amount of actions performed since the last timeout check
     actions_since_timeout_check: u16,
@@ -1320,8 +1320,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             let ip = self.ip;
             let ic_entry = self.get_ic_mut(ip);
             if let Some(ic) = ic_entry {
-                let ic = ic.clone();
-                if let Some(value) = ic.lookup_value_with_object(object, self)? {
+                if let Some(value) = ic.lookup_value_with_object(object)? {
                     self.push_stack(value);
                     return Ok(FrameControl::Continue);
                 }
@@ -3155,25 +3154,20 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     }
 
     pub fn get_ic(&self, ip: i32) -> Option<&InlineCache<'gc, Property>> {
-        self.ic
-            .get(ip as usize)
-            .and_then(|ic| ic.as_ref().map(|ic| ic.as_ref()))
+        self.ic.get(ip as usize).and_then(|ic| ic.as_ref())
     }
 
-    pub fn get_ic_mut(&mut self, ip: i32) -> Option<&mut Box<InlineCache<'gc, Property>>> {
-        let ic_entry = self.ic.get_mut(ip as usize);
-        if let Some(Some(ic)) = ic_entry {
-            Some(ic)
-        } else {
-            None
-        }
+    pub fn get_ic_mut(&mut self, ip: i32) -> Option<&mut InlineCache<'gc, Property>> {
+        self.ic
+            .get_mut(ip as usize)
+            .and_then(|entry| entry.as_mut())
     }
 
     pub fn init_ic_on_ip(&mut self, ip: i32) {
         if self.ic.len() <= ip as usize {
             self.ic.resize(ip as usize + 1, None);
         }
-        self.ic[ip as usize] = Some(Box::new(InlineCache::new()));
+        self.ic[ip as usize] = Some(InlineCache::new());
     }
 
     pub fn ip(&self) -> i32 {
