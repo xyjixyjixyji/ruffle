@@ -47,7 +47,6 @@ impl<'gc> InlineCache<'gc, Property> {
     {
         let base = object.base();
         let shape = base.shape();
-        // Slow path: Perform a full lookup
         let property = shape.and_then(|s| self.lookup(&s)).copied();
 
         if let Some(property) = property {

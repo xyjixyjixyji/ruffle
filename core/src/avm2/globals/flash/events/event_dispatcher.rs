@@ -18,6 +18,7 @@ fn dispatch_list<'gc>(
     match this.get_property(
         &Multiname::new(namespaces.flash_events_internal, "_dispatchList"),
         activation,
+        None,
     )? {
         Value::Object(o) => Ok(o),
         _ => {
@@ -120,6 +121,7 @@ pub fn will_trigger<'gc>(
         .get_property(
             &Multiname::new(namespaces.flash_events_internal, "_target"),
             activation,
+            None,
         )?
         .as_object()
         .unwrap_or(this);
@@ -161,7 +163,7 @@ pub fn to_string<'gc>(
     let name = Multiname::new(activation.avm2().namespaces.public_all(), "toString");
 
     object_proto
-        .get_property(&name, activation)?
+        .get_property(&name, activation, None)?
         .as_callable(activation, Some(&name), Some(object_proto.into()), false)?
         .call(this.into(), args, activation)
 }

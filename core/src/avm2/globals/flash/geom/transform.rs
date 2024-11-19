@@ -17,6 +17,7 @@ fn get_display_object<'gc>(
         .get_property(
             &Multiname::new(namespaces.flash_geom_internal, "_displayObject"),
             activation,
+            None,
         )?
         .as_object()
         .unwrap()

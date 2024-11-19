@@ -74,6 +74,7 @@ pub fn get_graphics<'gc>(
         let graphics = match this.get_property(
             &Multiname::new(namespaces.flash_display_internal, "_graphics"),
             activation,
+            None,
         )? {
             Value::Undefined | Value::Null => {
                 let graphics = Value::from(StageObject::graphics(activation, dobj)?);

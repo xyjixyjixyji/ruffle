@@ -537,7 +537,7 @@ impl<'gc> ClassObject<'gc> {
             )
             .into()),
             Some(Property::Slot { .. } | Property::ConstSlot { .. }) => {
-                receiver.get_property(multiname, activation)
+                receiver.get_property(multiname, activation, None)
             }
             None => Err(format!(
                 "Attempted to supercall method {:?}, which does not exist",

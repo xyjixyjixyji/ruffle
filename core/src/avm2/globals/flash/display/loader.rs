@@ -69,6 +69,7 @@ pub fn load<'gc>(
         .get_property(
             &Multiname::new(namespaces.flash_display_internal, "_contentLoaderInfo"),
             activation,
+            None,
         )?
         .as_object()
         .unwrap();
@@ -234,6 +235,7 @@ pub fn load_bytes<'gc>(
         .get_property(
             &Multiname::new(namespaces.flash_display_internal, "_contentLoaderInfo"),
             activation,
+            None,
         )?
         .as_object()
         .unwrap();
@@ -296,6 +298,7 @@ pub fn unload<'gc>(
         .get_property(
             &Multiname::new(namespaces.flash_display_internal, "_contentLoaderInfo"),
             activation,
+            None,
         )?
         .as_object()
         .unwrap();

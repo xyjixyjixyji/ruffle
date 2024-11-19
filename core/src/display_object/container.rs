@@ -724,7 +724,7 @@ impl<'gc> ChildContainer<'gc> {
                             activation.avm2().find_public_namespace(),
                             child.name(),
                         );
-                        let current_val = parent_obj.get_property(&name, &mut activation);
+                        let current_val = parent_obj.get_property(&name, &mut activation, None);
                         match current_val {
                             Ok(Avm2Value::Null) | Ok(Avm2Value::Undefined) => {}
                             Ok(_other) => {

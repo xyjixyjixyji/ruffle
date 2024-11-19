@@ -159,6 +159,8 @@ pub use crate::avm2::object::xml_list_object::{
 pub use crate::avm2::object::xml_object::{xml_allocator, XmlObject, XmlObjectWeak};
 use crate::font::Font;
 
+use super::inline_cache::InlineCache;
+
 /// Represents an object that can be directly interacted with by the AVM2
 /// runtime.
 #[enum_trait_object(
@@ -247,6 +249,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         mut self,
         multiname: &Multiname<'gc>,
         activation: &mut Activation<'_, 'gc>,
+        ic: Option<&mut InlineCache<'gc, Property>>,
     ) -> Result<Value<'gc>, Error<'gc>> {
         let base = self.base();
 
@@ -255,7 +258,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         let shape = base.shape();
         if let Some(shape) = *shape {
             if let Some(value_result) =
-                self.try_get_property_by_shape(activation, multiname, &shape)
+                self.try_get_property_by_shape(activation, multiname, &shape, ic)
             {
                 return value_result;
             }
@@ -311,6 +314,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         self.get_property(
             &Multiname::new(activation.avm2().find_public_namespace(), name),
             activation,
+            None,
         )
     }
 
@@ -329,18 +333,14 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         activation: &mut Activation<'_, 'gc>,
         multiname: &Multiname<'gc>,
         shape: &Shape<'gc>,
+        ic: Option<&mut InlineCache<'gc, Property>>,
     ) -> Option<Result<Value<'gc>, Error<'gc>>> {
         let base = self.base();
         if let Some(property) = shape.get_for_multiname(multiname) {
             match property.property() {
                 PropertyType::Property(p) => {
                     // update ic
-                    let ic = activation.get_ic_mut(activation.ip());
                     if let Some(ic) = ic {
-                        ic.insert(*shape, *p);
-                    } else {
-                        activation.init_ic_on_ip(activation.ip());
-                        let ic = activation.get_ic_mut(activation.ip()).unwrap();
                         ic.insert(*shape, *p);
                     }
 
@@ -976,12 +976,14 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         args: &[Value<'gc>],
         activation: &mut Activation<'_, 'gc>,
     ) -> Result<Object<'gc>, Error<'gc>> {
-        let ctor = self.get_property(multiname, activation)?.as_callable(
-            activation,
-            Some(multiname),
-            Some(Value::from(self.into())),
-            true,
-        )?;
+        let ctor = self
+            .get_property(multiname, activation, None)?
+            .as_callable(
+                activation,
+                Some(multiname),
+                Some(Value::from(self.into())),
+                true,
+            )?;
 
         ctor.construct(activation, args)
     }

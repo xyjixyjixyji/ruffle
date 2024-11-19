@@ -360,7 +360,7 @@ impl<'gc> TObject<'gc> for XmlObject<'gc> {
         let method = self
             .proto()
             .expect("XMLList missing prototype")
-            .get_property(multiname, activation)?;
+            .get_property(multiname, activation, None)?;
 
         // If the method doesn't exist on the prototype, and we have simple content,
         // then coerce this XML to a string and call the method on that.

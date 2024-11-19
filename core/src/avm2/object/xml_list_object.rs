@@ -575,7 +575,7 @@ impl<'gc> TObject<'gc> for XmlListObject<'gc> {
         let method = self
             .proto()
             .expect("XMLList missing prototype")
-            .get_property(multiname, activation)?;
+            .get_property(multiname, activation, None)?;
 
         // See https://github.com/adobe/avmplus/blob/858d034a3bd3a54d9b70909386435cf4aec81d21/core/XMLListObject.cpp#L50
         // in avmplus.

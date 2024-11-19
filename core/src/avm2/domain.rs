@@ -266,7 +266,7 @@ impl<'gc> Domain<'gc> {
         let (name, script) = self.find_defining_script(activation, &name.into())?;
         let globals = script.globals(activation.context)?;
 
-        globals.get_property(&name.into(), activation)
+        globals.get_property(&name.into(), activation, None)
     }
 
     /// Retrieve a value from this domain, with special handling for 'Vector.<SomeType>'.

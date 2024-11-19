@@ -23,8 +23,10 @@ use crate::avm2::{Avm2, Error};
 use crate::context::UpdateContext;
 use crate::string::{AvmAtom, AvmString, StringContext};
 use crate::tag_utils::SwfMovie;
+use gc_arena::barrier::Unlock;
 use gc_arena::Gc;
 use smallvec::SmallVec;
+use std::borrow::BorrowMut;
 use std::cmp::{min, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -77,11 +79,6 @@ enum FrameControl<'gc> {
 pub struct Activation<'a, 'gc: 'a> {
     /// The instruction index.
     ip: i32,
-
-    /// The inline cache for the current activation.
-    ///
-    /// indexed by ip
-    ic: Vec<Option<InlineCache<'gc, Property>>>,
 
     /// Amount of actions performed since the last timeout check
     actions_since_timeout_check: u16,
@@ -171,7 +168,6 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
         Self {
             ip: 0,
-            ic: Vec::new(),
             actions_since_timeout_check: 0,
             local_registers,
             outer: ScopeChain::new(context.avm2.stage_domain),
@@ -200,7 +196,6 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
         Self {
             ip: 0,
-            ic: Vec::new(),
             actions_since_timeout_check: 0,
             local_registers,
             outer: ScopeChain::new(context.avm2.stage_domain),
@@ -262,7 +257,6 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
         let mut created_activation = Self {
             ip: 0,
-            ic: Vec::new(),
             actions_since_timeout_check: 0,
             local_registers,
             outer: ScopeChain::new(domain),
@@ -539,7 +533,6 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
         Self {
             ip: 0,
-            ic: Vec::new(),
             actions_since_timeout_check: 0,
             local_registers,
             outer,
@@ -739,7 +732,10 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         // The method must be verified at this point
 
         let verified_info = method.verified_info.borrow();
-        let verified_code = verified_info.as_ref().unwrap().parsed_code.as_slice();
+
+        // TODO: remove this clone......
+        let mut verified_code = verified_info.as_ref().unwrap().parsed_code.clone();
+        let verified_code = verified_code.as_mut_slice();
 
         self.ip = 0;
 
@@ -806,7 +802,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn do_next_opcode(
         &mut self,
         method: Gc<'gc, BytecodeMethod<'gc>>,
-        opcodes: &[Op<'gc>],
+        opcodes: &mut [Op<'gc>],
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         self.actions_since_timeout_check += 1;
         if self.actions_since_timeout_check >= 64000 {
@@ -819,7 +815,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             }
         }
 
-        let op = &opcodes[self.ip as usize];
+        let op = &mut opcodes[self.ip as usize];
         self.ip += 1;
         avm_debug!(self.avm2(), "Opcode: {op:?}");
 
@@ -874,7 +870,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
                 Op::ReturnValue => self.op_return_value(method),
                 Op::ReturnValueNoCoerce => self.op_return_value_no_coerce(),
                 Op::ReturnVoid => self.op_return_void(),
-                Op::GetProperty { multiname } => self.op_get_property(*multiname),
+                Op::GetProperty { multiname, ic } => self.op_get_property(*multiname, ic),
                 Op::SetProperty { multiname } => self.op_set_property(*multiname),
                 Op::InitProperty { multiname } => self.op_init_property(*multiname),
                 Op::DeleteProperty { multiname } => self.op_delete_property(*multiname),
@@ -1196,7 +1192,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         let receiver = self
             .pop_stack()
             .coerce_to_object_or_typeerror(self, Some(&multiname))?;
-        let function = receiver.get_property(&multiname, self)?.as_callable(
+        let function = receiver.get_property(&multiname, self, None)?.as_callable(
             self,
             Some(&multiname),
             Some(receiver.into()),
@@ -1311,22 +1307,19 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn op_get_property(
         &mut self,
         multiname: Gc<'gc, Multiname<'gc>>,
+        ic: &mut InlineCache<'gc, Property>,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         // default path for static names
         if !multiname.has_lazy_component() {
             let object = self.pop_stack();
             let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
-            let ip = self.ip;
-            let ic_entry = self.get_ic_mut(ip);
-            if let Some(ic) = ic_entry {
-                if let Some(value) = ic.lookup_value_with_object(object)? {
-                    self.push_stack(value);
-                    return Ok(FrameControl::Continue);
-                }
+            if let Some(value) = ic.lookup_value_with_object(object)? {
+                self.push_stack(value);
+                return Ok(FrameControl::Continue);
             }
 
-            let value = object.get_property(&multiname, self)?;
+            let value = object.get_property(&multiname, self, Some(ic))?;
             self.push_stack(value);
             return Ok(FrameControl::Continue);
         }
@@ -1372,7 +1365,14 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         let multiname = multiname.fill_with_runtime_params(self)?;
         let object = self.pop_stack();
         let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
-        let value = object.get_property(&multiname, self)?;
+
+        // try ic
+        if let Some(value) = ic.lookup_value_with_object(object)? {
+            self.push_stack(value);
+            return Ok(FrameControl::Continue);
+        }
+
+        let value = object.get_property(&multiname, self, Some(ic))?;
         self.push_stack(value);
 
         Ok(FrameControl::Continue)
@@ -3151,26 +3151,5 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn op_throw(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         let error_val = self.pop_stack();
         Err(Error::AvmError(error_val))
-    }
-
-    pub fn get_ic(&self, ip: i32) -> Option<&InlineCache<'gc, Property>> {
-        self.ic.get(ip as usize).and_then(|ic| ic.as_ref())
-    }
-
-    pub fn get_ic_mut(&mut self, ip: i32) -> Option<&mut InlineCache<'gc, Property>> {
-        self.ic
-            .get_mut(ip as usize)
-            .and_then(|entry| entry.as_mut())
-    }
-
-    pub fn init_ic_on_ip(&mut self, ip: i32) {
-        if self.ic.len() <= ip as usize {
-            self.ic.resize(ip as usize + 1, None);
-        }
-        self.ic[ip as usize] = Some(InlineCache::new());
-    }
-
-    pub fn ip(&self) -> i32 {
-        self.ip
     }
 }

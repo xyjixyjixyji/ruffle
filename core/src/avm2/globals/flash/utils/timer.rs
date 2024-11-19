@@ -19,6 +19,7 @@ pub fn stop<'gc>(
         .get_property(
             &Multiname::new(namespaces.flash_utils_internal, "_timerId"),
             activation,
+            None,
         )
         .unwrap()
         .coerce_to_i32(activation)?;
@@ -47,6 +48,7 @@ pub fn start<'gc>(
         .get_property(
             &Multiname::new(namespaces.flash_utils_internal, "_timerId"),
             activation,
+            None,
         )
         .unwrap()
         .coerce_to_i32(activation)?;
@@ -55,6 +57,7 @@ pub fn start<'gc>(
         .get_property(
             &Multiname::new(namespaces.flash_utils_internal, "_delay"),
             activation,
+            None,
         )
         .unwrap()
         .coerce_to_number(activation)?;
@@ -64,6 +67,7 @@ pub fn start<'gc>(
             .get_property(
                 &Multiname::new(namespaces.flash_utils_internal, "onUpdate"),
                 activation,
+                None,
             )?
             .as_object()
             .expect("Internal function is object");
@@ -100,6 +104,7 @@ pub fn update_delay<'gc>(
         .get_property(
             &Multiname::new(namespaces.flash_utils_internal, "_timerId"),
             activation,
+            None,
         )
         .unwrap()
         .coerce_to_i32(activation)?;
@@ -108,6 +113,7 @@ pub fn update_delay<'gc>(
         .get_property(
             &Multiname::new(namespaces.flash_utils_internal, "_delay"),
             activation,
+            None,
         )
         .unwrap()
         .coerce_to_i32(activation)?;
