@@ -337,7 +337,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     ) -> Option<Result<Value<'gc>, Error<'gc>>> {
         let base = self.base();
         if let Some(property) = shape.get_for_multiname(multiname) {
-            match property.property() {
+            let property = property.property();
+            match property {
                 PropertyType::Property(p) => {
                     // update ic
                     if let Some(ic) = ic {
