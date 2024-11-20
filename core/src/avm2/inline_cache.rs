@@ -1,6 +1,6 @@
 //! The inline cache implementation for the AVM2, for speeding up property access.
 
-use super::{object::Shape, property::Property, Error, TObject, Value};
+use super::{object::Shape, property::Property, Activation, Error, TObject, Value};
 use gc_arena::Collect;
 
 const IC_SIZE: usize = 8;
@@ -49,6 +49,7 @@ impl<'gc> InlineCache<'gc, Property> {
     pub fn lookup_value_with_object<T>(
         &mut self,
         object: T,
+        activation: &mut Activation<'_, 'gc>,
     ) -> Result<Option<Value<'gc>>, Error<'gc>>
     where
         T: TObject<'gc>,
@@ -59,29 +60,36 @@ impl<'gc> InlineCache<'gc, Property> {
             let last_idx = (self.next_slot + IC_SIZE - 1) % IC_SIZE;
             if let (Some(s), Some(prop)) = (&self.entries[last_idx].0, &self.entries[last_idx].1) {
                 if s == &shape {
-                    return Self::resolve_property(object, *prop);
+                    return Self::resolve_property(object, *prop, activation);
                 }
             }
 
             if let Some(prop) = self.lookup(&shape) {
-                return Self::resolve_property(object, *prop);
+                return Self::resolve_property(object, *prop, activation);
             }
         }
         Ok(None)
     }
 
     #[inline(always)]
-    fn resolve_property<T>(object: T, property: Property) -> Result<Option<Value<'gc>>, Error<'gc>>
+    fn resolve_property<T>(
+        object: T,
+        property: Property,
+        activation: &mut Activation<'_, 'gc>,
+    ) -> Result<Option<Value<'gc>>, Error<'gc>>
     where
         T: TObject<'gc>,
     {
         match property {
-            Property::Method { disp_id } => object
-                .get_bound_method(disp_id)
-                .map_or(Ok(None), |bound_method| Ok(Some(bound_method.into()))),
             Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
                 Ok(Some(object.base().get_slot(slot_id)))
             }
+            Property::Virtual { get: Some(get), .. } => {
+                object.call_method(get, &[], activation).map(Some)
+            }
+            Property::Method { disp_id } => object
+                .get_bound_method(disp_id)
+                .map_or(Ok(None), |bound_method| Ok(Some(bound_method.into()))),
             _ => Ok(None),
         }
     }

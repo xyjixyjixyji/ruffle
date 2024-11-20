@@ -1314,7 +1314,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             let object = self.pop_stack();
             let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
-            if let Some(value) = ic.lookup_value_with_object(object)? {
+            if let Some(value) = ic.lookup_value_with_object(object, self)? {
                 self.push_stack(value);
                 return Ok(FrameControl::Continue);
             }
@@ -1367,7 +1367,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
         // try ic
-        if let Some(value) = ic.lookup_value_with_object(object)? {
+        if let Some(value) = ic.lookup_value_with_object(object, self)? {
             self.push_stack(value);
             return Ok(FrameControl::Continue);
         }
