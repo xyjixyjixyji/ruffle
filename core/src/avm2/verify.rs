@@ -948,7 +948,7 @@ fn resolve_op<'gc>(
 
             Op::GetProperty {
                 multiname,
-                ic: InlineCache::new(),
+                ic: Box::new(InlineCache::new()),
             }
         }
         AbcOp::SetProperty { index } => {

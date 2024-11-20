@@ -23,13 +23,10 @@ use crate::avm2::{Avm2, Error};
 use crate::context::UpdateContext;
 use crate::string::{AvmAtom, AvmString, StringContext};
 use crate::tag_utils::SwfMovie;
-use gc_arena::barrier::Unlock;
 use gc_arena::Gc;
 use smallvec::SmallVec;
-use std::borrow::BorrowMut;
 use std::cmp::{min, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
 use swf::avm2::types::{
     Exception, Index, Method as AbcMethod, MethodFlags as AbcMethodFlags, Namespace as AbcNamespace,
 };
@@ -729,10 +726,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         &mut self,
         method: Gc<'gc, BytecodeMethod<'gc>>,
     ) -> Result<Value<'gc>, Error<'gc>> {
-        // The method must be verified at this point
-
         let verified_info = method.verified_info.borrow();
-
         // TODO: remove this clone......
         let mut verified_code = verified_info.as_ref().unwrap().parsed_code.clone();
         let verified_code = verified_code.as_mut_slice();
@@ -1307,7 +1301,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn op_get_property(
         &mut self,
         multiname: Gc<'gc, Multiname<'gc>>,
-        ic: &mut InlineCache<'gc, Property>,
+        ic: &mut InlineCache<Property>,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         // default path for static names
         if !multiname.has_lazy_component() {

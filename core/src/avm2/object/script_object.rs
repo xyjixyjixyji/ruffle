@@ -18,7 +18,7 @@ use gc_arena::{
 use std::cell::{Ref, RefMut};
 use std::fmt::Debug;
 
-use super::shape::{PropertyInfo, PropertyType, Shape};
+use super::shape::{PropertyInfo, PropertyType};
 
 /// A class instance allocator that allocates `ScriptObject`s.
 pub fn scriptobject_allocator<'gc>(
@@ -28,8 +28,10 @@ pub fn scriptobject_allocator<'gc>(
     let mc = activation.context.gc_context;
 
     let mut base = ScriptObjectData::new(class);
-    let shape = Shape::new(mc, &base.vtable.get());
-    base.set_shape(shape);
+    let vtable = base.vtable.get();
+    let shape_manager = activation.avm2().shape_manager_mut();
+    let shape_id = shape_manager.get_shape_id(mc, &vtable);
+    base.set_shape_id(shape_id);
 
     Ok(ScriptObject(Gc::new(mc, base)).into())
 }
@@ -71,7 +73,7 @@ pub struct ScriptObjectData<'gc> {
     vtable: Lock<VTable<'gc>>,
 
     /// Shape of this object
-    shape: RefLock<Option<Shape<'gc>>>,
+    shape_id: Lock<Option<usize>>,
 }
 
 impl<'gc> TObject<'gc> for ScriptObject<'gc> {
@@ -175,13 +177,13 @@ impl<'gc> ScriptObjectData<'gc> {
             proto: Lock::new(proto),
             instance_class,
             vtable: Lock::new(vtable),
-            shape: RefLock::new(None),
+            shape_id: Lock::new(None),
         }
     }
 
-    pub fn set_shape(&mut self, shape: Shape<'gc>) {
-        let s = self.shape.get_mut();
-        *s = Some(shape);
+    pub fn set_shape_id(&mut self, id: usize) {
+        let shape_id = self.shape_id.get_mut();
+        *shape_id = Some(id);
     }
 }
 
@@ -298,13 +300,20 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         let key = maybe_int_property(local_name);
 
         // update the shape
-        let shape_mut = self.shape_mut(activation.gc());
-        if let Some(shape) = *shape_mut {
-            shape.add_property(PropertyInfo::new(
-                local_name,
-                multiname.namespace_set().to_vec(),
-                PropertyType::Value(value),
-            ));
+        let shape_id = self.shape_id();
+        if let Some(id) = shape_id {
+            let mc = activation.gc();
+            let shape_manager = activation.avm2().shape_manager_mut();
+            let new_shape_id = shape_manager.add_property(
+                mc,
+                id,
+                PropertyInfo::new(
+                    local_name,
+                    multiname.namespace_set().to_vec(),
+                    PropertyType::Value(value),
+                ),
+            );
+            self.set_shape_id(mc, new_shape_id);
         }
 
         self.values_mut(activation.gc()).insert(key, value);
@@ -451,12 +460,8 @@ impl<'gc> ScriptObjectWrapper<'gc> {
     }
 
     /// Get the shape of this object, if it has one.
-    pub fn shape(&self) -> Ref<Option<Shape<'gc>>> {
-        self.0.shape.borrow()
-    }
-
-    pub fn shape_mut(&self, mc: &Mutation<'gc>) -> RefMut<Option<Shape<'gc>>> {
-        unlock!(Gc::write(mc, self.0), ScriptObjectData, shape).borrow_mut()
+    pub fn shape_id(&self) -> Option<usize> {
+        self.0.shape_id.get()
     }
 
     pub fn is_sealed(&self) -> bool {
@@ -473,8 +478,8 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         unlock!(Gc::write(mc, self.0), ScriptObjectData, vtable).set(vtable);
     }
 
-    pub fn set_shape(&self, mc: &Mutation<'gc>, shape: Shape<'gc>) {
-        *self.shape_mut(mc) = Some(shape);
+    pub fn set_shape_id(&self, mc: &Mutation<'gc>, shape_id: usize) {
+        unlock!(Gc::write(mc, self.0), ScriptObjectData, shape_id).set(Some(shape_id));
     }
 
     pub fn debug_class_name(&self) -> Box<dyn std::fmt::Debug + 'gc> {

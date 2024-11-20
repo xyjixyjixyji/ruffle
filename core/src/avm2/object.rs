@@ -130,7 +130,7 @@ pub use crate::avm2::object::script_object::{
 pub use crate::avm2::object::shader_data_object::{
     shader_data_allocator, ShaderDataObject, ShaderDataObjectWeak,
 };
-pub use crate::avm2::object::shape::Shape;
+pub use crate::avm2::object::shape::ShapeManager;
 pub use crate::avm2::object::shared_object_object::{
     shared_object_allocator, SharedObjectObject, SharedObjectObjectWeak,
 };
@@ -249,16 +249,16 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         mut self,
         multiname: &Multiname<'gc>,
         activation: &mut Activation<'_, 'gc>,
-        ic: Option<&mut InlineCache<'gc, Property>>,
+        ic: Option<&mut InlineCache<Property>>,
     ) -> Result<Value<'gc>, Error<'gc>> {
         let base = self.base();
 
         // Fast path by checking in the shape, ic update happens here.
         // Note that only ic misses will reach this function.
-        let shape = base.shape();
-        if let Some(shape) = *shape {
+        let shape_id = base.shape_id();
+        if let Some(shape_id) = shape_id {
             if let Some(value_result) =
-                self.try_get_property_by_shape(activation, multiname, &shape, ic)
+                self.try_get_property_by_shape(activation, multiname, shape_id, ic)
             {
                 return value_result;
             }
@@ -332,17 +332,18 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         self,
         activation: &mut Activation<'_, 'gc>,
         multiname: &Multiname<'gc>,
-        shape: &Shape<'gc>,
-        ic: Option<&mut InlineCache<'gc, Property>>,
+        shape_id: usize,
+        ic: Option<&mut InlineCache<Property>>,
     ) -> Option<Result<Value<'gc>, Error<'gc>>> {
         let base = self.base();
-        if let Some(property) = shape.get_for_multiname(multiname) {
+        let shape_manager = activation.avm2().shape_manager();
+        if let Some(property) = shape_manager.get_for_multiname(shape_id, multiname) {
             let property = property.property();
             match property {
                 PropertyType::Property(p) => {
                     // update ic
                     if let Some(ic) = ic {
-                        ic.insert(*shape, *p);
+                        ic.insert(shape_id, *p);
                     }
 
                     match p {
@@ -416,13 +417,20 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         match self.vtable().get_trait(multiname) {
             Some(Property::Slot { slot_id }) => {
                 let base = self.base();
-                let shape = base.shape_mut(activation.context.gc_context);
-                if let Some(shape) = *shape {
-                    shape.add_property(PropertyInfo::new(
-                        multiname.local_name().unwrap(),
-                        multiname.namespace_set().to_vec(),
-                        PropertyType::Property(Property::Slot { slot_id }),
-                    ));
+                let shape_id = base.shape_id();
+                if let Some(id) = shape_id {
+                    let mc = activation.gc();
+                    let shape_manager = activation.avm2().shape_manager_mut();
+                    let new_shape_id = shape_manager.add_property(
+                        mc,
+                        id,
+                        PropertyInfo::new(
+                            multiname.local_name().unwrap(),
+                            multiname.namespace_set().to_vec(),
+                            PropertyType::Property(Property::Slot { slot_id }),
+                        ),
+                    );
+                    base.set_shape_id(mc, new_shape_id);
                 }
 
                 let value = self
@@ -1193,9 +1201,9 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     }
 
     #[no_dynamic]
-    fn set_shape(&self, mc: &Mutation<'gc>, shape: Shape<'gc>) {
+    fn set_shape_id(&self, mc: &Mutation<'gc>, shape_id: usize) {
         let base = self.base();
-        base.set_shape(mc, shape);
+        base.set_shape_id(mc, shape_id);
     }
 
     /// Try to corece this object into a `ClassObject`.

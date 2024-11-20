@@ -1,21 +1,21 @@
 //! The inline cache implementation for the AVM2, for speeding up property access.
 
-use super::{object::Shape, property::Property, Activation, Error, TObject, Value};
+use super::{property::Property, Activation, Error, TObject, Value};
 use gc_arena::Collect;
 
 const IC_SIZE: usize = 8;
 
 #[derive(Debug, Clone, Collect, Default)]
 #[collect(no_drop)]
-pub struct InlineCache<'gc, V>
+pub struct InlineCache<V>
 where
     V: PartialEq + Copy,
 {
-    entries: [(Option<Shape<'gc>>, Option<V>); IC_SIZE],
+    entries: [(Option<usize>, Option<V>); IC_SIZE],
     next_slot: usize,
 }
 
-impl<'gc, V> InlineCache<'gc, V>
+impl<V> InlineCache<V>
 where
     V: PartialEq + Copy,
 {
@@ -27,10 +27,10 @@ where
     }
 
     #[inline(always)]
-    pub fn lookup(&self, shape: &Shape<'gc>) -> Option<&V> {
-        for (cache_shape, value) in &self.entries {
-            if let (Some(s), Some(v)) = (cache_shape, value) {
-                if s == shape {
+    pub fn lookup(&self, shape_id: usize) -> Option<&V> {
+        for (cache_shape_id, value) in &self.entries {
+            if let (Some(id), Some(v)) = (cache_shape_id, value) {
+                if *id == shape_id {
                     return Some(v);
                 }
             }
@@ -38,13 +38,13 @@ where
         None
     }
 
-    pub fn insert(&mut self, shape: Shape<'gc>, value: V) {
-        self.entries[self.next_slot] = (Some(shape), Some(value));
+    pub fn insert(&mut self, shape_id: usize, value: V) {
+        self.entries[self.next_slot] = (Some(shape_id), Some(value));
         self.next_slot = (self.next_slot + 1) % IC_SIZE;
     }
 }
 
-impl<'gc> InlineCache<'gc, Property> {
+impl<'gc> InlineCache<Property> {
     #[inline(always)]
     pub fn lookup_value_with_object<T>(
         &mut self,
@@ -55,16 +55,16 @@ impl<'gc> InlineCache<'gc, Property> {
         T: TObject<'gc>,
     {
         let base = object.base();
-        let shape = base.shape();
-        if let Some(shape) = *shape {
+        let shape_id = base.shape_id();
+        if let Some(shape_id) = shape_id {
             let last_idx = (self.next_slot + IC_SIZE - 1) % IC_SIZE;
             if let (Some(s), Some(prop)) = (&self.entries[last_idx].0, &self.entries[last_idx].1) {
-                if s == &shape {
+                if *s == shape_id {
                     return Self::resolve_property(object, *prop, activation);
                 }
             }
 
-            if let Some(prop) = self.lookup(&shape) {
+            if let Some(prop) = self.lookup(shape_id) {
                 return Self::resolve_property(object, *prop, activation);
             }
         }

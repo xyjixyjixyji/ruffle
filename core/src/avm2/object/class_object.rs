@@ -26,8 +26,6 @@ use gc_arena::{
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 
-use super::Shape;
-
 /// An Object which can be called to execute its function code.
 #[derive(Collect, Clone, Copy)]
 #[collect(no_drop)]
@@ -262,7 +260,10 @@ impl<'gc> ClassObject<'gc> {
 
         let mc = activation.context.gc_context;
         self.set_vtable(mc, class_vtable);
-        self.set_shape(mc, Shape::new(mc, &class_vtable));
+
+        let shape_manager = activation.avm2().shape_manager_mut();
+        let shape_id = shape_manager.get_shape_id(mc, &class_vtable);
+        self.set_shape_id(mc, shape_id);
 
         self.run_class_initializer(activation)?;
 

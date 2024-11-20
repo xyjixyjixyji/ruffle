@@ -84,6 +84,7 @@ pub use crate::avm2::flv::FlvValueAvm2Ext;
 pub use crate::avm2::globals::flash::ui::context_menu::make_context_menu_state;
 pub use crate::avm2::multiname::{CommonMultinames, Multiname};
 pub use crate::avm2::namespace::{CommonNamespaces, Namespace};
+use crate::avm2::object::ShapeManager;
 pub use crate::avm2::object::{
     ArrayObject, BitmapDataObject, ClassObject, EventObject, Object, SoundChannelObject,
     StageObject, TObject,
@@ -109,6 +110,8 @@ pub struct Avm2<'gc> {
     /// The player runtime we're emulating
     #[collect(require_static)]
     pub player_runtime: PlayerRuntime,
+
+    shape_manager: ShapeManager<'gc>,
 
     /// Values currently present on the operand stack.
     stack: Vec<Value<'gc>>,
@@ -207,6 +210,7 @@ impl<'gc> Avm2<'gc> {
         Self {
             player_version,
             player_runtime,
+            shape_manager: ShapeManager::new(),
             stack: Vec::with_capacity(PREALLOCATED_STACK_SIZE),
             scope_stack: Vec::new(),
             call_stack: GcRefLock::new(mc, CallStack::new().into()),
@@ -238,6 +242,14 @@ impl<'gc> Avm2<'gc> {
 
             optimizer_enabled: true,
         }
+    }
+
+    pub fn shape_manager(&self) -> &ShapeManager<'gc> {
+        &self.shape_manager
+    }
+
+    pub fn shape_manager_mut(&mut self) -> &mut ShapeManager<'gc> {
+        &mut self.shape_manager
     }
 
     pub fn load_player_globals(context: &mut UpdateContext<'gc>) -> Result<(), Error<'gc>> {
