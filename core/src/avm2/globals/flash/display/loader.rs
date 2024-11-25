@@ -51,6 +51,7 @@ pub fn loader_allocator<'gc>(
         &Multiname::new(namespaces.flash_display_internal, "_contentLoaderInfo"),
         loader_info.into(),
         activation,
+        None,
     )?;
     Ok(loader)
 }

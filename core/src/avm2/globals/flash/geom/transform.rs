@@ -36,6 +36,7 @@ pub fn init<'gc>(
         &Multiname::new(namespaces.flash_geom_internal, "_displayObject"),
         args.get_value(0),
         activation,
+        None,
     )?;
     Ok(Value::Undefined)
 }

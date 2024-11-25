@@ -866,7 +866,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
                 Op::ReturnValueNoCoerce => self.op_return_value_no_coerce(),
                 Op::ReturnVoid => self.op_return_void(),
                 Op::GetProperty { multiname, ic } => self.op_get_property(*multiname, ic),
-                Op::SetProperty { multiname } => self.op_set_property(*multiname),
+                Op::SetProperty { multiname, ic } => self.op_set_property(*multiname, ic),
                 Op::InitProperty { multiname } => self.op_init_property(*multiname),
                 Op::DeleteProperty { multiname } => self.op_delete_property(*multiname),
                 Op::GetSuper { multiname } => self.op_get_super(*multiname),
@@ -1382,6 +1382,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn op_set_property(
         &mut self,
         multiname: Gc<'gc, Multiname<'gc>>,
+        ic: &mut InlineCache<Property>,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         let value = self.pop_stack();
 
@@ -1389,7 +1390,12 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         if !multiname.has_lazy_component() {
             let object = self.pop_stack();
             let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
-            object.set_property(&multiname, value, self)?;
+
+            // Try IC here
+            if ic.update_value_with_object(object, value, self)? {
+                return Ok(FrameControl::Continue);
+            }
+            object.set_property(&multiname, value, self, Some(ic))?;
             return Ok(FrameControl::Continue);
         }
 
@@ -1439,7 +1445,13 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         let multiname = multiname.fill_with_runtime_params(self)?;
         let object = self.pop_stack();
         let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
-        object.set_property(&multiname, value, self)?;
+
+        // try ic
+        if ic.update_value_with_object(object, value, self)? {
+            return Ok(FrameControl::Continue);
+        }
+
+        object.set_property(&multiname, value, self, Some(ic))?;
 
         Ok(FrameControl::Continue)
     }

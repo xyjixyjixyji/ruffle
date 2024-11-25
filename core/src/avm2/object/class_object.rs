@@ -607,7 +607,7 @@ impl<'gc> ClassObject<'gc> {
                 Ok(())
             }
             Some(Property::Slot { .. }) => {
-                receiver.set_property(multiname, value, activation)?;
+                receiver.set_property(multiname, value, activation, None)?;
                 Ok(())
             }
             _ => {

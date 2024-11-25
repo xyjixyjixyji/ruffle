@@ -17,13 +17,17 @@ pub enum PropertyType<'gc> {
 #[collect(no_drop)]
 pub struct PropertyInfo<'gc> {
     name: AvmString<'gc>,
-    ns: Vec<Namespace<'gc>>,
+    ns: Box<[Namespace<'gc>]>,
     property: PropertyType<'gc>,
 }
 
 impl<'gc> PropertyInfo<'gc> {
     pub fn new(name: AvmString<'gc>, ns: Vec<Namespace<'gc>>, property: PropertyType<'gc>) -> Self {
-        Self { name, ns, property }
+        Self {
+            name,
+            ns: ns.into(),
+            property,
+        }
     }
 
     pub fn name(&self) -> AvmString<'gc> {
@@ -159,7 +163,7 @@ impl<'gc> Shape<'gc> {
                     .iter()
                     .map(|(name, ns, property)| PropertyInfo {
                         name,
-                        ns: vec![ns],
+                        ns: Box::from([ns]),
                         property: PropertyType::Property(*property),
                     })
                     .collect(),

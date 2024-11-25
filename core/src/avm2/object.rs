@@ -255,8 +255,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
 
         // Fast path by checking in the shape, ic update happens here.
         // Note that only ic misses will reach this function.
-        let shape_id = base.shape_id();
-        if let Some(shape_id) = shape_id {
+        if let Some(shape_id) = base.shape_id() {
             if let Some(value_result) =
                 self.try_get_property_by_shape(activation, multiname, shape_id, ic)
             {
@@ -400,6 +399,48 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         self.set_property_local(&name, value, activation)
     }
 
+    fn try_set_property_by_shape(
+        self,
+        activation: &mut Activation<'_, 'gc>,
+        multiname: &Multiname<'gc>,
+        value: Value<'gc>,
+        shape_id: usize,
+        ic: Option<&mut InlineCache<Property>>,
+    ) -> Result<bool, Error<'gc>> {
+        let base = self.base();
+        let shape_manager = activation.avm2().shape_manager();
+        if let Some(property) = shape_manager.get_for_multiname(shape_id, multiname) {
+            let property = property.property();
+            match property {
+                PropertyType::Property(p) => {
+                    // update ic
+                    if let Some(ic) = ic {
+                        ic.insert(shape_id, *p);
+                    }
+
+                    match p {
+                        Property::Slot { slot_id } => {
+                            base.set_slot(*slot_id, value, activation.context.gc_context);
+                            Ok(true)
+                        }
+                        Property::Virtual { set: Some(set), .. } => {
+                            self.call_method(*set, &[value], activation).map(|_| ())?;
+                            Ok(true)
+                        }
+
+                        // Fallthrough: mostly invalid cases
+                        Property::Method { .. } => Ok(false),
+                        _ => Ok(false),
+                    }
+                }
+                // TODO: fallthrough, specific implementation?
+                PropertyType::Value(_) => Ok(false),
+            }
+        } else {
+            Ok(false)
+        }
+    }
+
     /// Set a property by Multiname lookup.
     ///
     /// This method should not be overridden.
@@ -413,10 +454,18 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         multiname: &Multiname<'gc>,
         value: Value<'gc>,
         activation: &mut Activation<'_, 'gc>,
+        ic: Option<&mut InlineCache<Property>>,
     ) -> Result<(), Error<'gc>> {
-        match self.vtable().get_trait(multiname) {
-            Some(Property::Slot { slot_id }) => {
-                let base = self.base();
+        // Try ic
+        let base = self.base();
+        if let Some(shape_id) = base.shape_id() {
+            if self.try_set_property_by_shape(activation, multiname, value, shape_id, ic)? {
+                return Ok(());
+            }
+        }
+
+        match self.vtable().get_trait_with_ns(multiname) {
+            Some((ns, Property::Slot { slot_id })) => {
                 let shape_id = base.shape_id();
                 if let Some(id) = shape_id {
                     let mc = activation.gc();
@@ -426,11 +475,15 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
                         id,
                         PropertyInfo::new(
                             multiname.local_name().unwrap(),
-                            multiname.namespace_set().to_vec(),
+                            vec![ns],
                             PropertyType::Property(Property::Slot { slot_id }),
                         ),
                     );
-                    base.set_shape_id(mc, new_shape_id);
+                    if new_shape_id != id {
+                        base.set_shape_id(mc, new_shape_id);
+                    } else {
+                        // update ic
+                    }
                 }
 
                 let value = self
@@ -441,7 +494,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
 
                 Ok(())
             }
-            Some(Property::Method { .. }) => {
+            Some((_, Property::Method { .. })) => {
                 // Similar to the get_property special case for XML/XMLList.
                 if (self.as_xml_object().is_some() || self.as_xml_list_object().is_some())
                     && multiname.contains_public_namespace()
@@ -456,10 +509,10 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
                     self.instance_class(),
                 ))
             }
-            Some(Property::Virtual { set: Some(set), .. }) => {
+            Some((_, Property::Virtual { set: Some(set), .. })) => {
                 self.call_method(set, &[value], activation).map(|_| ())
             }
-            Some(Property::ConstSlot { .. }) | Some(Property::Virtual { set: None, .. }) => {
+            Some((_, Property::ConstSlot { .. } | Property::Virtual { set: None, .. })) => {
                 Err(error::make_reference_error(
                     activation,
                     error::ReferenceErrorCode::WriteToReadOnly,
@@ -480,7 +533,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         activation: &mut Activation<'_, 'gc>,
     ) -> Result<(), Error<'gc>> {
         let name = Multiname::new(activation.avm2().namespaces.public_vm_internal(), name);
-        self.set_property(&name, value, activation)
+        self.set_property(&name, value, activation, None)
     }
 
     /// Init a local property of the object. The Multiname should always be public.

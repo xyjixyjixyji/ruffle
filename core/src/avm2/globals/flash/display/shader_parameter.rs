@@ -27,8 +27,18 @@ pub fn make_shader_parameter<'gc>(
             let type_name =
                 AvmString::new_utf8(activation.context.gc_context, param_type.to_string());
 
-            obj.set_property(&Multiname::new(ns, "_index"), index.into(), activation)?;
-            obj.set_property(&Multiname::new(ns, "_type"), type_name.into(), activation)?;
+            obj.set_property(
+                &Multiname::new(ns, "_index"),
+                index.into(),
+                activation,
+                None,
+            )?;
+            obj.set_property(
+                &Multiname::new(ns, "_type"),
+                type_name.into(),
+                activation,
+                None,
+            )?;
             for meta in metadata {
                 let name = AvmString::new_utf8(activation.context.gc_context, &meta.key);
                 let value = meta.value.clone().as_avm2_value(activation, false)?;
@@ -55,8 +65,14 @@ pub fn make_shader_parameter<'gc>(
                 &Multiname::new(ns, "_channels"),
                 (*channels).into(),
                 activation,
+                None,
             )?;
-            obj.set_property(&Multiname::new(ns, "_index"), index.into(), activation)?;
+            obj.set_property(
+                &Multiname::new(ns, "_index"),
+                index.into(),
+                activation,
+                None,
+            )?;
             obj.set_public_property(
                 "name",
                 AvmString::new_utf8(activation.context.gc_context, name).into(),

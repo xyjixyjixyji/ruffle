@@ -732,6 +732,7 @@ impl<'gc> ChildContainer<'gc> {
                                     &name,
                                     Avm2Value::Null,
                                     &mut activation,
+                                    None,
                                 );
                                 if let Err(e) = res {
                                     tracing::error!("Failed to set child {} ({:?}) to null on parent obj {:?}: {:?}", child.name(), child, parent_obj, e);

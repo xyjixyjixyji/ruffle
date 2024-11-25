@@ -300,8 +300,7 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         let key = maybe_int_property(local_name);
 
         // update the shape
-        let shape_id = self.shape_id();
-        if let Some(id) = shape_id {
+        if let Some(id) = self.shape_id() {
             let mc = activation.gc();
             let shape_manager = activation.avm2().shape_manager_mut();
             let new_shape_id = shape_manager.add_property(
@@ -347,7 +346,6 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         self.0
             .slots
             .get(id as usize)
-            .cloned()
             .map(|s| s.get())
             .expect("Slot index out of bounds")
     }

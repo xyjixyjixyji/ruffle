@@ -40,6 +40,7 @@ pub fn create_text_line<'gc>(
                 ),
                 "complete".into(),
                 activation,
+                None,
             )?;
             return Ok(Value::Null);
         }
@@ -87,18 +88,21 @@ pub fn create_text_line<'gc>(
         &Multiname::new(namespaces.flash_text_engine_internal, "_textBlock"),
         this.into(),
         activation,
+        None,
     )?;
 
     instance.set_property(
         &Multiname::new(namespaces.flash_text_engine_internal, "_specifiedWidth"),
         args.get_value(1),
         activation,
+        None,
     )?;
 
     instance.set_property(
         &Multiname::new(namespaces.flash_text_engine_internal, "_rawTextLength"),
         text.len().into(),
         activation,
+        None,
     )?;
 
     this.set_property(
@@ -108,12 +112,14 @@ pub fn create_text_line<'gc>(
         ),
         "success".into(),
         activation,
+        None,
     )?;
 
     this.set_property(
         &Multiname::new(namespaces.flash_text_engine_internal, "_firstLine"),
         instance.into(),
         activation,
+        None,
     )?;
 
     Ok(instance.into())

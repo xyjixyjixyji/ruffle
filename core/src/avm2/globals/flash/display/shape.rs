@@ -62,6 +62,7 @@ pub fn get_graphics<'gc>(
                     &Multiname::new(namespaces.flash_display_internal, "_graphics"),
                     graphics,
                     activation,
+                    None,
                 )?;
                 graphics
             }
