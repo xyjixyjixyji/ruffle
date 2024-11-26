@@ -334,6 +334,8 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         }
         if let Some(name) = multiname.local_name() {
             let key = maybe_int_property(name);
+
+            self.remove_shape_id(mc);
             self.values_mut(mc).remove(&key);
             true
         } else {
@@ -478,6 +480,10 @@ impl<'gc> ScriptObjectWrapper<'gc> {
 
     pub fn set_shape_id(&self, mc: &Mutation<'gc>, shape_id: usize) {
         unlock!(Gc::write(mc, self.0), ScriptObjectData, shape_id).set(Some(shape_id));
+    }
+
+    pub fn remove_shape_id(&self, mc: &Mutation<'gc>) {
+        unlock!(Gc::write(mc, self.0), ScriptObjectData, shape_id).set(None);
     }
 
     pub fn debug_class_name(&self) -> Box<dyn std::fmt::Debug + 'gc> {

@@ -1503,7 +1503,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
                         name_value.as_object().unwrap(),
                         self.context.gc_context,
                     );
-
+                    object.remove_shape_id(self.context.gc_context);
                     self.push_raw(true);
                     return Ok(FrameControl::Continue);
                 }

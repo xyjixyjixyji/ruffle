@@ -1259,6 +1259,11 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         base.set_shape_id(mc, shape_id);
     }
 
+    #[no_dynamic]
+    fn remove_shape_id(&self, mc: &Mutation<'gc>) {
+        self.base().remove_shape_id(mc);
+    }
+
     /// Try to corece this object into a `ClassObject`.
     fn as_class_object(&self) -> Option<ClassObject<'gc>> {
         None
