@@ -1,6 +1,6 @@
 //! The inline cache implementation for the AVM2, for speeding up property access.
 
-use super::{property::Property, Activation, Error, TObject, Value};
+use super::{property::Property, Activation, Error, Multiname, TObject, Value};
 use gc_arena::Collect;
 
 const IC_SIZE: usize = 8;
@@ -70,6 +70,68 @@ impl<'gc> InlineCache<Property> {
             }
         }
         Ok(None)
+    }
+
+    #[inline(always)]
+    pub fn call_function_with_object<T>(
+        &mut self,
+        object: T,
+        arguments: &[Value<'gc>],
+        multiname: &Multiname<'gc>,
+        activation: &mut Activation<'_, 'gc>,
+    ) -> Result<Option<Value<'gc>>, Error<'gc>>
+    where
+        T: TObject<'gc>,
+    {
+        let base = object.base();
+        let shape_id = base.shape_id();
+        if let Some(shape_id) = shape_id {
+            if let Some(prop) = self.lookup(shape_id) {
+                return Self::call_property_with_object(
+                    object, *prop, arguments, multiname, activation,
+                );
+            }
+        }
+        Ok(None)
+    }
+
+    #[inline(always)]
+    fn call_property_with_object<T>(
+        receiver: T,
+        property: Property,
+        arguments: &[Value<'gc>],
+        multiname: &Multiname<'gc>,
+        activation: &mut Activation<'_, 'gc>,
+    ) -> Result<Option<Value<'gc>>, Error<'gc>>
+    where
+        T: TObject<'gc>,
+    {
+        match property {
+            Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
+                let obj = receiver.base().get_slot(slot_id).as_callable(
+                    activation,
+                    Some(multiname),
+                    Some(Value::from(receiver.into())),
+                    false,
+                )?;
+                obj.call(Value::from(receiver.into()), arguments, activation)
+                    .map(Some)
+            }
+            Property::Method { disp_id } => receiver
+                .call_method(disp_id, arguments, activation)
+                .map(Some),
+            Property::Virtual { get: Some(get), .. } => {
+                let obj = receiver.call_method(get, &[], activation)?.as_callable(
+                    activation,
+                    Some(multiname),
+                    Some(Value::from(receiver.into())),
+                    false,
+                )?;
+                obj.call(Value::from(receiver.into()), arguments, activation)
+                    .map(Some)
+            }
+            _ => Ok(None),
+        }
     }
 
     #[inline(always)]

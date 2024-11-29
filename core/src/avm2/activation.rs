@@ -1171,6 +1171,11 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             .pop_stack()
             .coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
+        if let Some(value) = ic.call_function_with_object(receiver, &args, &multiname, self)? {
+            self.push_stack(value);
+            return Ok(FrameControl::Continue);
+        }
+
         let value = receiver.call_property(&multiname, &args, self)?;
 
         self.push_stack(value);
