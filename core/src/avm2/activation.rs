@@ -841,7 +841,8 @@ impl<'a, 'gc> Activation<'a, 'gc> {
                 Op::CallProperty {
                     multiname,
                     num_args,
-                } => self.op_call_property(*multiname, *num_args),
+                    ic,
+                } => self.op_call_property(*multiname, *num_args, ic),
                 Op::CallPropLex {
                     multiname,
                     num_args,
@@ -1162,6 +1163,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         &mut self,
         multiname: Gc<'gc, Multiname<'gc>>,
         arg_count: u32,
+        ic: &mut InlineCache<Property>,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         let args = self.pop_stack_args(arg_count);
         let multiname = multiname.fill_with_runtime_params(self)?;

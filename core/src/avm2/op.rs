@@ -8,7 +8,6 @@ use swf::avm2::types::{Exception, Index, LookupSwitch, Method, Namespace};
 
 use super::{inline_cache::InlineCache, property::Property};
 
-// TODO: add inline caches for some opcodes
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
 pub enum Op<'gc> {
@@ -41,6 +40,8 @@ pub enum Op<'gc> {
         multiname: Gc<'gc, Multiname<'gc>>,
 
         num_args: u32,
+
+        ic: Box<InlineCache<Property>>,
     },
     CallPropLex {
         multiname: Gc<'gc, Multiname<'gc>>,

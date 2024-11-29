@@ -906,6 +906,7 @@ fn resolve_op<'gc>(
             Op::CallProperty {
                 multiname,
                 num_args,
+                ic: Box::new(InlineCache::new()),
             }
         }
         AbcOp::CallPropLex { index, num_args } => {

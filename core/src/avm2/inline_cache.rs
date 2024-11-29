@@ -38,6 +38,7 @@ where
         None
     }
 
+    #[inline(always)]
     pub fn insert(&mut self, shape_id: usize, value: V) {
         self.entries[self.next_slot] = (Some(shape_id), Some(value));
         self.next_slot = (self.next_slot + 1) % IC_SIZE;

@@ -1536,6 +1536,7 @@ pub fn optimize<'gc>(
                 Op::CallProperty {
                     multiname,
                     num_args,
+                    ..
                 } => {
                     let mut stack_push_done = false;
 

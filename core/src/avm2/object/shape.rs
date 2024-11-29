@@ -79,6 +79,7 @@ impl<'gc> ShapeManager<'gc> {
     }
 
     /// Returns the shape id
+    #[inline(always)]
     pub fn get_shape_id(&mut self, mc: &Mutation<'gc>, vtable: &VTable<'gc>) -> usize {
         let shape = Shape::new(mc, vtable);
         // find if the shape already exists
@@ -92,6 +93,7 @@ impl<'gc> ShapeManager<'gc> {
 
     /// Add the new property to the shape, if the property exists, we will return the
     /// same shape id; otherwise, we will create a new shape and get the new shape id.
+    #[inline(always)]
     pub fn add_property(
         &mut self,
         mc: &Mutation<'gc>,
@@ -116,6 +118,7 @@ impl<'gc> ShapeManager<'gc> {
         self.add_shape(new_shape)
     }
 
+    #[inline(always)]
     pub fn get_for_multiname(
         &self,
         shape_id: usize,
