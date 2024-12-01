@@ -169,7 +169,7 @@ impl<'gc> InlineCache<Property> {
                 object.base().set_slot(slot_id, value, mc);
                 Ok(true)
             }
-            Property::Virtual { get: Some(set), .. } => {
+            Property::Virtual { set: Some(set), .. } => {
                 object.call_method(set, &[value], activation).map(|_| ())?;
                 Ok(true)
             }
