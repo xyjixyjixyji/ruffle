@@ -269,9 +269,7 @@ impl<'gc> ScriptObjectWrapper<'gc> {
             let values = obj.values();
             let value = values.as_hashmap().get(&key);
             if let Some(value) = value {
-                // TODO: can its prototype be modified elsewhere?
-                self.property_cache_mut(activation.gc())
-                    .insert(key, value.value);
+                // Do not update local property cache: prototype can be modified elsewhere.
                 return Ok(value.value);
             }
             proto = obj.proto();
