@@ -955,7 +955,10 @@ fn resolve_op<'gc>(
         AbcOp::SetProperty { index } => {
             let multiname = pool_multiname(activation, translation_unit, index)?;
 
-            Op::SetProperty { multiname }
+            Op::SetProperty {
+                multiname,
+                ic: Box::new(InlineCache::new()),
+            }
         }
         AbcOp::InitProperty { index } => {
             let multiname = pool_multiname(activation, translation_unit, index)?;

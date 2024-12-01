@@ -1391,7 +1391,7 @@ pub fn optimize<'gc>(
                     }
                     // `stack_pop_multiname` handled lazy
                 }
-                Op::SetProperty { multiname } => {
+                Op::SetProperty { multiname, .. } => {
                     let set_value = stack.pop(activation)?;
 
                     stack.pop_for_multiname(activation, *multiname)?;

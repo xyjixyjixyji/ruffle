@@ -30,6 +30,7 @@ pub fn stop<'gc>(
             &Multiname::new(namespaces.flash_utils_internal, "_timerId"),
             (-1).into(),
             activation,
+            None,
         )?;
     }
 
@@ -87,6 +88,7 @@ pub fn start<'gc>(
             &Multiname::new(namespaces.flash_utils_internal, "_timerId"),
             id.into(),
             activation,
+            None,
         )?;
     }
     Ok(Value::Undefined)

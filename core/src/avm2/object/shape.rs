@@ -2,28 +2,25 @@ use gc_arena::{Collect, GcCell, Mutation};
 use std::borrow::Borrow;
 
 use crate::{
-    avm2::{property::Property, vtable::VTable, Multiname, Namespace, Value},
+    avm2::{property::Property, vtable::VTable, Multiname, Namespace},
     string::AvmString,
 };
 
 #[derive(Debug, Clone, PartialEq, Collect)]
 #[collect(no_drop)]
-pub enum PropertyType<'gc> {
-    Property(Property),
-    Value(Value<'gc>),
-}
-
-#[derive(Debug, Clone, PartialEq, Collect)]
-#[collect(no_drop)]
 pub struct PropertyInfo<'gc> {
     name: AvmString<'gc>,
-    ns: Vec<Namespace<'gc>>,
-    property: PropertyType<'gc>,
+    ns: Box<[Namespace<'gc>]>,
+    property: Property,
 }
 
 impl<'gc> PropertyInfo<'gc> {
-    pub fn new(name: AvmString<'gc>, ns: Vec<Namespace<'gc>>, property: PropertyType<'gc>) -> Self {
-        Self { name, ns, property }
+    pub fn new(name: AvmString<'gc>, ns: Vec<Namespace<'gc>>, property: Property) -> Self {
+        Self {
+            name,
+            ns: ns.into(),
+            property,
+        }
     }
 
     pub fn name(&self) -> AvmString<'gc> {
@@ -34,7 +31,7 @@ impl<'gc> PropertyInfo<'gc> {
         &self.ns
     }
 
-    pub fn property(&self) -> &PropertyType<'gc> {
+    pub fn property(&self) -> &Property {
         &self.property
     }
 }
@@ -159,8 +156,8 @@ impl<'gc> Shape<'gc> {
                     .iter()
                     .map(|(name, ns, property)| PropertyInfo {
                         name,
-                        ns: vec![ns],
-                        property: PropertyType::Property(*property),
+                        ns: Box::from([ns]),
+                        property: *property,
                     })
                     .collect(),
             },

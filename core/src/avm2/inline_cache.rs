@@ -28,7 +28,7 @@ where
 
     #[inline(always)]
     pub fn lookup(&self, shape_id: usize) -> Option<&V> {
-        for (cache_shape_id, value) in &self.entries {
+        for (cache_shape_id, value) in self.entries.iter().rev() {
             if let (Some(id), Some(v)) = (cache_shape_id, value) {
                 if *id == shape_id {
                     return Some(v);
@@ -61,12 +61,12 @@ impl<'gc> InlineCache<Property> {
             let last_idx = (self.next_slot + IC_SIZE - 1) % IC_SIZE;
             if let (Some(s), Some(prop)) = (&self.entries[last_idx].0, &self.entries[last_idx].1) {
                 if *s == shape_id {
-                    return Self::resolve_property(object, *prop, activation);
+                    return Self::find_property(object, *prop, activation);
                 }
             }
 
             if let Some(prop) = self.lookup(shape_id) {
-                return Self::resolve_property(object, *prop, activation);
+                return Self::find_property(object, *prop, activation);
             }
         }
         Ok(None)
@@ -134,8 +134,52 @@ impl<'gc> InlineCache<Property> {
         }
     }
 
+    #[inline]
+    pub fn update_value_with_object<T>(
+        &mut self,
+        object: T,
+        value: Value<'gc>,
+        activation: &mut Activation<'_, 'gc>,
+    ) -> Result<bool, Error<'gc>>
+    where
+        T: TObject<'gc>,
+    {
+        let base = object.base();
+        if let Some(shape_id) = base.shape_id() {
+            if let Some(prop) = self.lookup(shape_id) {
+                return Self::update_property(object, *prop, value, activation);
+            }
+        }
+        Ok(false)
+    }
+
+    #[inline]
+    fn update_property<T>(
+        object: T,
+        property: Property,
+        value: Value<'gc>,
+        activation: &mut Activation<'_, 'gc>,
+    ) -> Result<bool, Error<'gc>>
+    where
+        T: TObject<'gc>,
+    {
+        match property {
+            Property::Slot { slot_id } => {
+                let mc = activation.context.gc_context;
+                object.base().set_slot(slot_id, value, mc);
+                Ok(true)
+            }
+            Property::Virtual { get: Some(set), .. } => {
+                object.call_method(set, &[value], activation).map(|_| ())?;
+                Ok(true)
+            }
+            // Fallback, most likely an error case.
+            _ => Ok(false),
+        }
+    }
+
     #[inline(always)]
-    fn resolve_property<T>(
+    fn find_property<T>(
         object: T,
         property: Property,
         activation: &mut Activation<'_, 'gc>,

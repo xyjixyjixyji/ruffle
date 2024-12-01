@@ -321,6 +321,7 @@ pub enum Op<'gc> {
     },
     SetProperty {
         multiname: Gc<'gc, Multiname<'gc>>,
+        ic: Box<InlineCache<Property>>,
     },
     SetSlot {
         // note: 0-indexed, as opposed to FP.
