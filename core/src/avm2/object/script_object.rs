@@ -18,8 +18,6 @@ use gc_arena::{
 use std::cell::{Ref, RefMut};
 use std::fmt::Debug;
 
-use super::shape::{PropertyInfo, PropertyType};
-
 /// A class instance allocator that allocates `ScriptObject`s.
 pub fn scriptobject_allocator<'gc>(
     class: ClassObject<'gc>,
@@ -299,21 +297,8 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         // https://github.com/adobe/avmplus/blob/858d034a3bd3a54d9b70909386435cf4aec81d21/core/ScriptObject.cpp#L311-L315
         let key = maybe_int_property(local_name);
 
-        // update the shape
-        if let Some(id) = self.shape_id() {
-            let mc = activation.gc();
-            let shape_manager = activation.avm2().shape_manager_mut();
-            let new_shape_id = shape_manager.add_property(
-                mc,
-                id,
-                PropertyInfo::new(
-                    local_name,
-                    multiname.namespace_set().to_vec(),
-                    PropertyType::Value(value),
-                ),
-            );
-            self.set_shape_id(mc, new_shape_id);
-        }
+        // Don't update the shape: dynamic properties are stored in
+        // a per-object hash map. Shape only tracks static properties.
 
         self.values_mut(activation.gc()).insert(key, value);
         Ok(())
@@ -334,8 +319,6 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         }
         if let Some(name) = multiname.local_name() {
             let key = maybe_int_property(name);
-
-            self.remove_shape_id(mc);
             self.values_mut(mc).remove(&key);
             true
         } else {
@@ -480,10 +463,6 @@ impl<'gc> ScriptObjectWrapper<'gc> {
 
     pub fn set_shape_id(&self, mc: &Mutation<'gc>, shape_id: usize) {
         unlock!(Gc::write(mc, self.0), ScriptObjectData, shape_id).set(Some(shape_id));
-    }
-
-    pub fn remove_shape_id(&self, mc: &Mutation<'gc>) {
-        unlock!(Gc::write(mc, self.0), ScriptObjectData, shape_id).set(None);
     }
 
     pub fn debug_class_name(&self) -> Box<dyn std::fmt::Debug + 'gc> {

@@ -28,7 +28,7 @@ where
 
     #[inline(always)]
     pub fn lookup(&self, shape_id: usize) -> Option<&V> {
-        for (cache_shape_id, value) in &self.entries {
+        for (cache_shape_id, value) in self.entries.iter().rev() {
             if let (Some(id), Some(v)) = (cache_shape_id, value) {
                 if *id == shape_id {
                     return Some(v);
@@ -145,15 +145,7 @@ impl<'gc> InlineCache<Property> {
         T: TObject<'gc>,
     {
         let base = object.base();
-        let shape_id = base.shape_id();
-        if let Some(shape_id) = shape_id {
-            let last_idx = (self.next_slot + IC_SIZE - 1) % IC_SIZE;
-            if let (Some(s), Some(prop)) = (&self.entries[last_idx].0, &self.entries[last_idx].1) {
-                if *s == shape_id {
-                    return Self::update_property(object, *prop, value, activation);
-                }
-            }
-
+        if let Some(shape_id) = base.shape_id() {
             if let Some(prop) = self.lookup(shape_id) {
                 return Self::update_property(object, *prop, value, activation);
             }

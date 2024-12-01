@@ -23,7 +23,7 @@ use crate::streams::NetStream;
 use crate::string::{AvmString, StringContext};
 use gc_arena::{Collect, Gc, Mutation};
 use ruffle_macros::enum_trait_object;
-use shape::{PropertyInfo, PropertyType};
+use shape::PropertyInfo;
 use std::cell::{Ref, RefMut};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
@@ -338,32 +338,26 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         let shape_manager = activation.avm2().shape_manager();
         if let Some(property) = shape_manager.get_for_multiname(shape_id, multiname) {
             let property = property.property();
-            match property {
-                PropertyType::Property(p) => {
-                    // update ic
-                    if let Some(ic) = ic {
-                        ic.insert(shape_id, *p);
-                    }
+            if let Some(ic) = ic {
+                ic.insert(shape_id, *property);
+            }
 
-                    match p {
-                        Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
-                            Some(Ok(base.get_slot(*slot_id)))
-                        }
-                        Property::Virtual { get: Some(get), .. } => {
-                            Some(self.call_method(*get, &[], activation))
-                        }
-                        Property::Method { disp_id } => {
-                            // TODO: handle other cases, prevent fall thru
-                            if let Some(bound_method) = self.get_bound_method(*disp_id) {
-                                Some(Ok(bound_method.into()))
-                            } else {
-                                None
-                            }
-                        }
-                        _ => None, // Virtual { get: None, .. }
+            match property {
+                Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
+                    Some(Ok(base.get_slot(*slot_id)))
+                }
+                Property::Virtual { get: Some(get), .. } => {
+                    Some(self.call_method(*get, &[], activation))
+                }
+                Property::Method { disp_id } => {
+                    // TODO: handle other cases, prevent fall thru
+                    if let Some(bound_method) = self.get_bound_method(*disp_id) {
+                        Some(Ok(bound_method.into()))
+                    } else {
+                        None
                     }
                 }
-                PropertyType::Value(v) => Some(Ok(*v)),
+                _ => None, // Virtual { get: None, .. }
             }
         } else {
             None
@@ -411,30 +405,25 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         let shape_manager = activation.avm2().shape_manager();
         if let Some(property) = shape_manager.get_for_multiname(shape_id, multiname) {
             let property = property.property();
+
+            // update ic
+            if let Some(ic) = ic {
+                ic.insert(shape_id, *property);
+            }
+
             match property {
-                PropertyType::Property(p) => {
-                    // update ic
-                    if let Some(ic) = ic {
-                        ic.insert(shape_id, *p);
-                    }
-
-                    match p {
-                        Property::Slot { slot_id } => {
-                            base.set_slot(*slot_id, value, activation.context.gc_context);
-                            Ok(true)
-                        }
-                        Property::Virtual { set: Some(set), .. } => {
-                            self.call_method(*set, &[value], activation).map(|_| ())?;
-                            Ok(true)
-                        }
-
-                        // Fallthrough: mostly invalid cases
-                        Property::Method { .. } => Ok(false),
-                        _ => Ok(false),
-                    }
+                Property::Slot { slot_id } => {
+                    base.set_slot(*slot_id, value, activation.context.gc_context);
+                    Ok(true)
                 }
-                // TODO: fallthrough, specific implementation?
-                PropertyType::Value(_) => Ok(false),
+                Property::Virtual { set: Some(set), .. } => {
+                    self.call_method(*set, &[value], activation).map(|_| ())?;
+                    Ok(true)
+                }
+
+                // Fallthrough: mostly invalid cases
+                Property::Method { .. } => Ok(false),
+                _ => Ok(false),
             }
         } else {
             Ok(false)
@@ -456,7 +445,6 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         activation: &mut Activation<'_, 'gc>,
         ic: Option<&mut InlineCache<Property>>,
     ) -> Result<(), Error<'gc>> {
-        // Try ic
         let base = self.base();
         if let Some(shape_id) = base.shape_id() {
             if self.try_set_property_by_shape(activation, multiname, value, shape_id, ic)? {
@@ -465,7 +453,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         }
 
         match self.vtable().get_trait_with_ns(multiname) {
-            Some((ns, Property::Slot { slot_id })) => {
+            Some((ns, prop @ Property::Slot { slot_id })) => {
                 let shape_id = base.shape_id();
                 if let Some(id) = shape_id {
                     let mc = activation.gc();
@@ -473,16 +461,11 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
                     let new_shape_id = shape_manager.add_property(
                         mc,
                         id,
-                        PropertyInfo::new(
-                            multiname.local_name().unwrap(),
-                            vec![ns],
-                            PropertyType::Property(Property::Slot { slot_id }),
-                        ),
+                        PropertyInfo::new(multiname.local_name().unwrap(), vec![ns], prop),
                     );
+                    // New property added
                     if new_shape_id != id {
                         base.set_shape_id(mc, new_shape_id);
-                    } else {
-                        // update ic
                     }
                 }
 
@@ -520,6 +503,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
                     self.instance_class(),
                 ))
             }
+            // Dynamic Property
             None => self.set_property_local(multiname, value, activation),
         }
     }
@@ -1257,11 +1241,6 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn set_shape_id(&self, mc: &Mutation<'gc>, shape_id: usize) {
         let base = self.base();
         base.set_shape_id(mc, shape_id);
-    }
-
-    #[no_dynamic]
-    fn remove_shape_id(&self, mc: &Mutation<'gc>) {
-        self.base().remove_shape_id(mc);
     }
 
     /// Try to corece this object into a `ClassObject`.
