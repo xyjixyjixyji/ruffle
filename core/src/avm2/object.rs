@@ -414,6 +414,9 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
 
             match property {
                 Property::Slot { slot_id } => {
+                    let value = self
+                        .vtable()
+                        .coerce_trait_value(*slot_id, value, activation)?;
                     base.set_slot(*slot_id, value, activation.context.gc_context);
                     Ok(true)
                 }
