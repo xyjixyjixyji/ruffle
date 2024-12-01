@@ -45,6 +45,7 @@ mod function_object;
 mod index_buffer_3d_object;
 mod loaderinfo_object;
 mod local_connection_object;
+mod local_prop_cache;
 mod namespace_object;
 mod net_connection_object;
 mod netstream_object;

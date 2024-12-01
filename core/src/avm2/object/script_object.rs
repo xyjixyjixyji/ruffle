@@ -4,7 +4,9 @@ use crate::avm2::activation::Activation;
 use crate::avm2::class::Class;
 use crate::avm2::dynamic_map::{DynamicKey, DynamicMap};
 use crate::avm2::error;
-use crate::avm2::object::{ClassObject, FunctionObject, Object, ObjectPtr, TObject};
+use crate::avm2::object::{
+    local_prop_cache::LocalPropertyCache, ClassObject, FunctionObject, Object, ObjectPtr, TObject,
+};
 use crate::avm2::value::Value;
 use crate::avm2::vtable::VTable;
 use crate::avm2::Multiname;
@@ -72,6 +74,9 @@ pub struct ScriptObjectData<'gc> {
 
     /// Shape of this object
     shape_id: Lock<Option<usize>>,
+
+    /// A write-through local property cache.
+    local_prop_cache: RefLock<LocalPropertyCache<'gc>>,
 }
 
 impl<'gc> TObject<'gc> for ScriptObject<'gc> {
@@ -176,6 +181,7 @@ impl<'gc> ScriptObjectData<'gc> {
             instance_class,
             vtable: Lock::new(vtable),
             shape_id: Lock::new(None),
+            local_prop_cache: RefLock::new(LocalPropertyCache::new()),
         }
     }
 
@@ -199,6 +205,14 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         mc: &Mutation<'gc>,
     ) -> RefMut<DynamicMap<DynamicKey<'gc>, Value<'gc>>> {
         unlock!(Gc::write(mc, self.0), ScriptObjectData, values).borrow_mut()
+    }
+
+    fn property_cache(&self) -> Ref<LocalPropertyCache<'gc>> {
+        self.0.local_prop_cache.borrow()
+    }
+
+    fn property_cache_mut(&self, mc: &Mutation<'gc>) -> RefMut<LocalPropertyCache<'gc>> {
+        unlock!(Gc::write(mc, self.0), ScriptObjectData, local_prop_cache).borrow_mut()
     }
 
     fn bound_methods(&self) -> Ref<Vec<Option<FunctionObject<'gc>>>> {
@@ -236,9 +250,15 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         // Unbelievably cursed special case in avmplus:
         // https://github.com/adobe/avmplus/blob/858d034a3bd3a54d9b70909386435cf4aec81d21/core/ScriptObject.cpp#L195-L199
         let key = maybe_int_property(local_name);
+        if let Some(value) = self.property_cache().lookup(&key) {
+            return Ok(value);
+        }
+
         let values = self.values();
         let value = values.as_hashmap().get(&key);
         if let Some(value) = value {
+            self.property_cache_mut(activation.gc())
+                .insert(key, value.value);
             return Ok(value.value);
         }
 
@@ -249,6 +269,9 @@ impl<'gc> ScriptObjectWrapper<'gc> {
             let values = obj.values();
             let value = values.as_hashmap().get(&key);
             if let Some(value) = value {
+                // TODO: can its prototype be modified elsewhere?
+                self.property_cache_mut(activation.gc())
+                    .insert(key, value.value);
                 return Ok(value.value);
             }
             proto = obj.proto();
@@ -297,8 +320,10 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         // https://github.com/adobe/avmplus/blob/858d034a3bd3a54d9b70909386435cf4aec81d21/core/ScriptObject.cpp#L311-L315
         let key = maybe_int_property(local_name);
 
-        // Don't update the shape: dynamic properties are stored in
-        // a per-object hash map. Shape only tracks static properties.
+        // Don't update the shape: dynamic properties are stored in a
+        // per-object hash map. Shape only tracks static properties.
+        // Instead, update the per-object local property cache
+        self.property_cache_mut(activation.gc()).insert(key, value);
 
         self.values_mut(activation.gc()).insert(key, value);
         Ok(())
@@ -319,6 +344,7 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         }
         if let Some(name) = multiname.local_name() {
             let key = maybe_int_property(name);
+            self.property_cache_mut(mc).delete(&key);
             self.values_mut(mc).remove(&key);
             true
         } else {
@@ -364,7 +390,8 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         if name.contains_public_namespace() {
             if let Some(name) = name.local_name() {
                 let key = maybe_int_property(name);
-                return self.values().as_hashmap().get(&key).is_some();
+                return self.property_cache().lookup(&key).is_some()
+                    || self.values().as_hashmap().get(&key).is_some();
             }
         }
         false
