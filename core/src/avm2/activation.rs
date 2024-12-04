@@ -1176,7 +1176,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             return Ok(FrameControl::Continue);
         }
 
-        let value = receiver.call_property(&multiname, &args, self)?;
+        let value = receiver.call_property(&multiname, &args, self, Some(ic))?;
 
         self.push_stack(value);
 
@@ -1217,7 +1217,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             .pop_stack()
             .coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
-        receiver.call_property(&multiname, &args, self)?;
+        receiver.call_property(&multiname, &args, self, None)?;
 
         Ok(FrameControl::Continue)
     }

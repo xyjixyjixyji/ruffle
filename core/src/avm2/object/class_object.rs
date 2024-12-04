@@ -466,7 +466,7 @@ impl<'gc> ClassObject<'gc> {
 
             callee.call(receiver.into(), arguments, activation)
         } else {
-            receiver.call_property(multiname, arguments, activation)
+            receiver.call_property(multiname, arguments, activation, None)
         }
     }
 

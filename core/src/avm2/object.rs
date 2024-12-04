@@ -364,6 +364,59 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         }
     }
 
+    fn try_call_property_by_shape(
+        self,
+        activation: &mut Activation<'_, 'gc>,
+        multiname: &Multiname<'gc>,
+        arguments: &[Value<'gc>],
+        shape_id: usize,
+        ic: Option<&mut InlineCache<Property>>,
+    ) -> Option<Result<Value<'gc>, Error<'gc>>> {
+        let base = self.base();
+        let shape_manager = activation.avm2().shape_manager();
+        if let Some(property) = shape_manager.get_for_multiname(shape_id, multiname) {
+            let property = property.property();
+            match property {
+                PropertyType::Property(p) => {
+                    // update ic
+                    if let Some(ic) = ic {
+                        ic.insert(shape_id, *p);
+                    }
+
+                    match p {
+                        Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
+                            let obj = self.base().get_slot(slot_id).as_callable(
+                                activation,
+                                Some(multiname),
+                                Some(Value::from(self.into())),
+                                false,
+                            )?;
+
+                            Some(obj.call(Value::from(self.into()), arguments, activation))
+                        }
+                        Property::Method { disp_id } => {
+                            Some(self.call_method(disp_id, arguments, activation))
+                        }
+                        Some(Property::Virtual { get: Some(get), .. }) => {
+                            let obj = self.call_method(get, &[], activation)?.as_callable(
+                                activation,
+                                Some(multiname),
+                                Some(Value::from(self.into())),
+                                false,
+                            )?;
+
+                            Some(obj.call(Value::from(self.into()), arguments, activation))
+                        }
+                        _ => None, // Virtual { get: None, .. }
+                    }
+                }
+                PropertyType::Value(v) => None,
+            }
+        } else {
+            None
+        }
+    }
+
     /// Set a local property of the object. The Multiname should always be public.
     ///
     /// This skips class field lookups and looks at:
@@ -616,7 +669,21 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         multiname: &Multiname<'gc>,
         arguments: &[Value<'gc>],
         activation: &mut Activation<'_, 'gc>,
+        ic: Option<&mut InlineCache<Property>>,
     ) -> Result<Value<'gc>, Error<'gc>> {
+        let base = self.base();
+
+        // Fast path by checking in the shape, ic update happens here.
+        // Note that only ic misses will reach this function.
+        let shape_id = base.shape_id();
+        if let Some(shape_id) = shape_id {
+            if let Some(value_result) =
+                self.try_call_property_by_shape(activation, multiname, shape_id, arguments, ic)
+            {
+                return value_result;
+            }
+        }
+
         match self.vtable().get_trait(multiname) {
             Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
                 let obj = self.base().get_slot(slot_id).as_callable(
@@ -661,6 +728,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
             &Multiname::new(activation.avm2().find_public_namespace(), name),
             arguments,
             activation,
+            None,
         )
     }
 

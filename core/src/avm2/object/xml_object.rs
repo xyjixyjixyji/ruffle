@@ -378,7 +378,7 @@ impl<'gc> TObject<'gc> for XmlObject<'gc> {
                         this.node().xml_to_string(activation).into(),
                         activation,
                     )?;
-                    return receiver.call_property(multiname, arguments, activation);
+                    return receiver.call_property(multiname, arguments, activation, None);
                 }
             }
         }

@@ -608,7 +608,7 @@ impl<'gc> TObject<'gc> for XmlListObject<'gc> {
                         .first_mut()
                         .unwrap()
                         .get_or_create_xml(activation)
-                        .call_property(multiname, arguments, activation);
+                        .call_property(multiname, arguments, activation, None);
                 }
             }
         }
