@@ -45,6 +45,7 @@ mod function_object;
 mod index_buffer_3d_object;
 mod loaderinfo_object;
 mod local_connection_object;
+mod local_prop_cache;
 mod namespace_object;
 mod net_connection_object;
 mod netstream_object;
@@ -466,6 +467,9 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
 
             match property {
                 Property::Slot { slot_id } => {
+                    let value = self
+                        .vtable()
+                        .coerce_trait_value(*slot_id, value, activation)?;
                     base.set_slot(*slot_id, value, activation.context.gc_context);
                     Ok(true)
                 }
