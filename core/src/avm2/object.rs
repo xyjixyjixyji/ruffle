@@ -373,45 +373,46 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         shape_id: usize,
         ic: Option<&mut InlineCache<Property>>,
     ) -> Option<Result<Value<'gc>, Error<'gc>>> {
-        let base = self.base();
         let shape_manager = activation.avm2().shape_manager();
         if let Some(property) = shape_manager.get_for_multiname(shape_id, multiname) {
             let property = property.property();
+            // update ic
+            if let Some(ic) = ic {
+                ic.insert(shape_id, *property);
+            }
             match property {
-                PropertyType::Property(p) => {
-                    // update ic
-                    if let Some(ic) = ic {
-                        ic.insert(shape_id, *p);
-                    }
+                Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
+                    let obj = self.base().get_slot(*slot_id).as_callable(
+                        activation,
+                        Some(multiname),
+                        Some(Value::from(self.into())),
+                        false,
+                    );
 
-                    match p {
-                        Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
-                            let obj = self.base().get_slot(slot_id).as_callable(
-                                activation,
-                                Some(multiname),
-                                Some(Value::from(self.into())),
-                                false,
-                            )?;
-
-                            Some(obj.call(Value::from(self.into()), arguments, activation))
-                        }
-                        Property::Method { disp_id } => {
-                            Some(self.call_method(disp_id, arguments, activation))
-                        }
-                        Some(Property::Virtual { get: Some(get), .. }) => {
-                            let obj = self.call_method(get, &[], activation)?.as_callable(
-                                activation,
-                                Some(multiname),
-                                Some(Value::from(self.into())),
-                                false,
-                            )?;
-
-                            Some(obj.call(Value::from(self.into()), arguments, activation))
-                        }
-                        _ => None, // Virtual { get: None, .. }
+                    if let Ok(obj) = obj {
+                        Some(obj.call(Value::from(self.into()), arguments, activation))
+                    } else {
+                        None
                     }
                 }
-                PropertyType::Value(v) => None,
+                Property::Method { disp_id } => {
+                    Some(self.call_method(*disp_id, arguments, activation))
+                }
+                Property::Virtual { get: Some(get), .. } => {
+                    let obj = self.call_method(*get, &[], activation).ok()?.as_callable(
+                        activation,
+                        Some(multiname),
+                        Some(Value::from(self.into())),
+                        false,
+                    );
+
+                    if let Ok(obj) = obj {
+                        Some(obj.call(Value::from(self.into()), arguments, activation))
+                    } else {
+                        None
+                    }
+                }
+                _ => None, // Virtual { get: None, .. }
             }
         } else {
             None
@@ -682,7 +683,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         let shape_id = base.shape_id();
         if let Some(shape_id) = shape_id {
             if let Some(value_result) =
-                self.try_call_property_by_shape(activation, multiname, shape_id, arguments, ic)
+                self.try_call_property_by_shape(activation, multiname, arguments, shape_id, ic)
             {
                 return value_result;
             }
