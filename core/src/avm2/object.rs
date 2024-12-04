@@ -678,18 +678,18 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     ) -> Result<Value<'gc>, Error<'gc>> {
         let base = self.base();
 
-        // Fast path by checking in the shape, ic update happens here.
-        // Note that only ic misses will reach this function.
+        let property = self.vtable().get_trait(multiname);
+
         let shape_id = base.shape_id();
         if let Some(shape_id) = shape_id {
-            if let Some(value_result) =
-                self.try_call_property_by_shape(activation, multiname, arguments, shape_id, ic)
-            {
-                return value_result;
+            if let Some(property) = property {
+                if let Some(ic) = ic {
+                    ic.insert(shape_id, property);
+                }
             }
         }
 
-        match self.vtable().get_trait(multiname) {
+        match property {
             Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
                 let obj = self.base().get_slot(slot_id).as_callable(
                     activation,
