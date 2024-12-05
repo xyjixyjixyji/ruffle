@@ -223,6 +223,20 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         unlock!(Gc::write(mc, self.0), ScriptObjectData, bound_methods).borrow_mut()
     }
 
+    #[inline]
+    pub fn get_property_local_cached(&self, multiname: &Multiname<'gc>) -> Option<Value<'gc>> {
+        if !multiname.contains_public_namespace() {
+            return None;
+        }
+        if let Some(local_name) = multiname.local_name() {
+            let key = maybe_int_property(local_name);
+            if let Some(value) = self.property_cache().lookup(&key) {
+                return Some(value);
+            }
+        }
+        None
+    }
+
     pub fn get_property_local(
         &self,
         multiname: &Multiname<'gc>,
@@ -250,6 +264,7 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         // Unbelievably cursed special case in avmplus:
         // https://github.com/adobe/avmplus/blob/858d034a3bd3a54d9b70909386435cf4aec81d21/core/ScriptObject.cpp#L195-L199
         let key = maybe_int_property(local_name);
+        // Lookup again in case of objects without shape id.
         if let Some(value) = self.property_cache().lookup(&key) {
             return Ok(value);
         }

@@ -162,6 +162,12 @@ use crate::font::Font;
 
 use super::inline_cache::InlineCache;
 
+pub enum PropertyLookupOption<T> {
+    Some(T),
+    Unsupported,
+    NotFound,
+}
+
 /// Represents an object that can be directly interacted with by the AVM2
 /// runtime.
 #[enum_trait_object(
@@ -257,10 +263,15 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         // Fast path by checking in the shape, ic update happens here.
         // Note that only ic misses will reach this function.
         if let Some(shape_id) = base.shape_id() {
-            if let Some(value_result) =
-                self.try_get_property_by_shape(activation, multiname, shape_id, ic)
-            {
-                return value_result;
+            match self.try_get_property_by_shape(activation, multiname, shape_id, ic) {
+                PropertyLookupOption::Some(value_result) => return value_result,
+                PropertyLookupOption::NotFound => {
+                    // Dynamic property lookup
+                    if let Some(value) = self.base().get_property_local_cached(multiname) {
+                        return Ok(value);
+                    }
+                }
+                PropertyLookupOption::Unsupported => {}
             }
         }
 
@@ -334,7 +345,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         multiname: &Multiname<'gc>,
         shape_id: usize,
         ic: Option<&mut InlineCache<Property>>,
-    ) -> Option<Result<Value<'gc>, Error<'gc>>> {
+    ) -> PropertyLookupOption<Result<Value<'gc>, Error<'gc>>> {
         let base = self.base();
         let shape_manager = activation.avm2().shape_manager();
         if let Some(property) = shape_manager.get_for_multiname(shape_id, multiname) {
@@ -345,23 +356,23 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
 
             match property {
                 Property::Slot { slot_id } | Property::ConstSlot { slot_id } => {
-                    Some(Ok(base.get_slot(*slot_id)))
+                    PropertyLookupOption::Some(Ok(base.get_slot(*slot_id)))
                 }
                 Property::Virtual { get: Some(get), .. } => {
-                    Some(self.call_method(*get, &[], activation))
+                    PropertyLookupOption::Some(self.call_method(*get, &[], activation))
                 }
                 Property::Method { disp_id } => {
                     // TODO: handle other cases, prevent fall thru
                     if let Some(bound_method) = self.get_bound_method(*disp_id) {
-                        Some(Ok(bound_method.into()))
+                        PropertyLookupOption::Some(Ok(bound_method.into()))
                     } else {
-                        None
+                        PropertyLookupOption::Unsupported
                     }
                 }
-                _ => None, // Virtual { get: None, .. }
+                _ => PropertyLookupOption::Unsupported, // Virtual { get: None, .. }
             }
         } else {
-            None
+            PropertyLookupOption::NotFound
         }
     }
 
