@@ -625,6 +625,10 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             .map_or(false, |activation_class| class == activation_class)
     }
 
+    pub fn class_is_system_class(&self, class: ClassObject<'gc>) -> bool {
+        self.context.avm2.classes().object == class
+    }
+
     pub fn avm2(&mut self) -> &mut Avm2<'gc> {
         self.context.avm2
     }

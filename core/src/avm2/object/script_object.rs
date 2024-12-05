@@ -30,7 +30,7 @@ pub fn scriptobject_allocator<'gc>(
     let mut base = ScriptObjectData::new(class);
     let vtable = base.vtable.get();
 
-    if !activation.class_is_activation(class) {
+    if !activation.class_is_activation(class) && !activation.class_is_system_class(class) {
         let shape_manager = activation.avm2().shape_manager_mut();
         let shape_id = shape_manager.get_shape_id(mc, &vtable);
         base.set_shape_id(shape_id);
