@@ -11,7 +11,9 @@ use crate::avm2::{Activation, Error, QName};
 use crate::string::AvmAtom;
 
 use gc_arena::{Collect, Gc};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use swf::avm2::read::Reader;
 use swf::avm2::types::{
     Class as AbcClass, Index, MethodFlags as AbcMethodFlags, Multiname as AbcMultiname, Op as AbcOp,
@@ -906,7 +908,7 @@ fn resolve_op<'gc>(
             Op::CallProperty {
                 multiname,
                 num_args,
-                ic: Box::new(InlineCache::new()),
+                ic: Rc::new(RefCell::new(InlineCache::new())),
             }
         }
         AbcOp::CallPropLex { index, num_args } => {
@@ -949,7 +951,7 @@ fn resolve_op<'gc>(
 
             Op::GetProperty {
                 multiname,
-                ic: Box::new(InlineCache::new()),
+                ic: Rc::new(RefCell::new(InlineCache::new())),
             }
         }
         AbcOp::SetProperty { index } => {
@@ -957,7 +959,7 @@ fn resolve_op<'gc>(
 
             Op::SetProperty {
                 multiname,
-                ic: Box::new(InlineCache::new()),
+                ic: Rc::new(RefCell::new(InlineCache::new())),
             }
         }
         AbcOp::InitProperty { index } => {

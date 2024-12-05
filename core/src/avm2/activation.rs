@@ -25,7 +25,9 @@ use crate::string::{AvmAtom, AvmString, StringContext};
 use crate::tag_utils::SwfMovie;
 use gc_arena::Gc;
 use smallvec::SmallVec;
+use std::cell::RefCell;
 use std::cmp::{min, Ordering};
+use std::rc::Rc;
 use std::sync::Arc;
 use swf::avm2::types::{
     Exception, Index, Method as AbcMethod, MethodFlags as AbcMethodFlags, Namespace as AbcNamespace,
@@ -737,8 +739,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     ) -> Result<Value<'gc>, Error<'gc>> {
         let verified_info = method.verified_info.borrow();
         // TODO: remove this clone......
-        let mut verified_code = verified_info.as_ref().unwrap().parsed_code.clone();
-        let verified_code = verified_code.as_mut_slice();
+        let verified_code = verified_info.as_ref().unwrap().parsed_code.as_slice();
 
         self.ip = 0;
 
@@ -805,7 +806,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn do_next_opcode(
         &mut self,
         method: Gc<'gc, BytecodeMethod<'gc>>,
-        opcodes: &mut [Op<'gc>],
+        opcodes: &[Op<'gc>],
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         self.actions_since_timeout_check += 1;
         if self.actions_since_timeout_check >= 64000 {
@@ -818,7 +819,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             }
         }
 
-        let op = &mut opcodes[self.ip as usize];
+        let op = &opcodes[self.ip as usize];
         self.ip += 1;
         avm_debug!(self.avm2(), "Opcode: {op:?}");
 
@@ -851,7 +852,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
                     multiname,
                     num_args,
                     ic,
-                } => self.op_call_property(*multiname, *num_args, ic),
+                } => self.op_call_property(*multiname, *num_args, ic.clone()),
                 Op::CallPropLex {
                     multiname,
                     num_args,
@@ -874,8 +875,8 @@ impl<'a, 'gc> Activation<'a, 'gc> {
                 Op::ReturnValue => self.op_return_value(method),
                 Op::ReturnValueNoCoerce => self.op_return_value_no_coerce(),
                 Op::ReturnVoid => self.op_return_void(),
-                Op::GetProperty { multiname, ic } => self.op_get_property(*multiname, ic),
-                Op::SetProperty { multiname, ic } => self.op_set_property(*multiname, ic),
+                Op::GetProperty { multiname, ic } => self.op_get_property(*multiname, ic.clone()),
+                Op::SetProperty { multiname, ic } => self.op_set_property(*multiname, ic.clone()),
                 Op::InitProperty { multiname } => self.op_init_property(*multiname),
                 Op::DeleteProperty { multiname } => self.op_delete_property(*multiname),
                 Op::GetSuper { multiname } => self.op_get_super(*multiname),
@@ -1172,7 +1173,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         &mut self,
         multiname: Gc<'gc, Multiname<'gc>>,
         arg_count: u32,
-        ic: &mut InlineCache<Property>,
+        ic: Rc<RefCell<InlineCache<Property>>>,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         let args = self.pop_stack_args(arg_count);
         let multiname = multiname.fill_with_runtime_params(self)?;
@@ -1180,12 +1181,13 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             .pop_stack()
             .coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
+        let mut ic = ic.borrow_mut();
         if let Some(value) = ic.call_function_with_object(receiver, &args, &multiname, self)? {
             self.push_stack(value);
             return Ok(FrameControl::Continue);
         }
 
-        let value = receiver.call_property(&multiname, &args, self, Some(ic))?;
+        let value = receiver.call_property(&multiname, &args, self, Some(&mut ic))?;
 
         self.push_stack(value);
 
@@ -1317,19 +1319,20 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn op_get_property(
         &mut self,
         multiname: Gc<'gc, Multiname<'gc>>,
-        ic: &mut InlineCache<Property>,
+        ic: Rc<RefCell<InlineCache<Property>>>,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         // default path for static names
         if !multiname.has_lazy_component() {
             let object = self.pop_stack();
             let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
+            let mut ic = ic.borrow_mut();
             if let Some(value) = ic.lookup_value_with_object(object, self)? {
                 self.push_stack(value);
                 return Ok(FrameControl::Continue);
             }
 
-            let value = object.get_property(&multiname, self, Some(ic))?;
+            let value = object.get_property(&multiname, self, Some(&mut ic))?;
             self.push_stack(value);
             return Ok(FrameControl::Continue);
         }
@@ -1377,12 +1380,13 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
         // try ic
+        let mut ic = ic.borrow_mut();
         if let Some(value) = ic.lookup_value_with_object(object, self)? {
             self.push_stack(value);
             return Ok(FrameControl::Continue);
         }
 
-        let value = object.get_property(&multiname, self, Some(ic))?;
+        let value = object.get_property(&multiname, self, Some(&mut ic))?;
         self.push_stack(value);
 
         Ok(FrameControl::Continue)
@@ -1391,7 +1395,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn op_set_property(
         &mut self,
         multiname: Gc<'gc, Multiname<'gc>>,
-        ic: &mut InlineCache<Property>,
+        ic: Rc<RefCell<InlineCache<Property>>>,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         let value = self.pop_stack();
 
@@ -1401,10 +1405,11 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
             // Try IC here
+            let mut ic = ic.borrow_mut();
             if ic.update_value_with_object(object, value, self)? {
                 return Ok(FrameControl::Continue);
             }
-            object.set_property(&multiname, value, self, Some(ic))?;
+            object.set_property(&multiname, value, self, Some(&mut ic))?;
             return Ok(FrameControl::Continue);
         }
 
@@ -1456,11 +1461,12 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         let object = object.coerce_to_object_or_typeerror(self, Some(&multiname))?;
 
         // try ic
+        let mut ic = ic.borrow_mut();
         if ic.update_value_with_object(object, value, self)? {
             return Ok(FrameControl::Continue);
         }
 
-        object.set_property(&multiname, value, self, Some(ic))?;
+        object.set_property(&multiname, value, self, Some(&mut ic))?;
 
         Ok(FrameControl::Continue)
     }

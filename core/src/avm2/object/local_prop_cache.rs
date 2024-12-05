@@ -28,12 +28,7 @@ impl<'gc> LocalPropertyCache<'gc> {
 
     #[inline(always)]
     fn lookup_index(&self, key: DynamicKey<'gc>) -> Option<usize> {
-        for i in 0..self.cache_size {
-            if self.cache[i].0 == key {
-                return Some(i);
-            }
-        }
-        None
+        (0..self.cache_size).find(|&i| self.cache[i].0 == key)
     }
 
     #[inline]
