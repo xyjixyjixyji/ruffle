@@ -26,6 +26,7 @@ use crate::tag_utils::SwfMovie;
 use gc_arena::Gc;
 use smallvec::SmallVec;
 use std::cmp::{min, Ordering};
+use std::ops::DerefMut;
 use std::sync::Arc;
 use swf::avm2::types::{
     Exception, Index, Method as AbcMethod, MethodFlags as AbcMethodFlags, Namespace as AbcNamespace,
@@ -736,9 +737,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         method: Gc<'gc, BytecodeMethod<'gc>>,
     ) -> Result<Value<'gc>, Error<'gc>> {
         let verified_info = method.verified_info.borrow();
-        // TODO: remove this clone......
-        let mut verified_code = verified_info.as_ref().unwrap().parsed_code.clone();
-        let verified_code = verified_code.as_mut_slice();
+        let verified_code = verified_info.as_ref().unwrap().parsed_code.as_slice();
 
         self.ip = 0;
 
@@ -805,7 +804,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn do_next_opcode(
         &mut self,
         method: Gc<'gc, BytecodeMethod<'gc>>,
-        opcodes: &mut [Op<'gc>],
+        opcodes: &[Op<'gc>],
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         self.actions_since_timeout_check += 1;
         if self.actions_since_timeout_check >= 64000 {
@@ -818,7 +817,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             }
         }
 
-        let op = &mut opcodes[self.ip as usize];
+        let op = &opcodes[self.ip as usize];
         self.ip += 1;
         avm_debug!(self.avm2(), "Opcode: {op:?}");
 
@@ -851,7 +850,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
                     multiname,
                     num_args,
                     ic,
-                } => self.op_call_property(*multiname, *num_args, ic),
+                } => self.op_call_property(*multiname, *num_args, ic.borrow_mut().deref_mut()),
                 Op::CallPropLex {
                     multiname,
                     num_args,
@@ -874,8 +873,12 @@ impl<'a, 'gc> Activation<'a, 'gc> {
                 Op::ReturnValue => self.op_return_value(method),
                 Op::ReturnValueNoCoerce => self.op_return_value_no_coerce(),
                 Op::ReturnVoid => self.op_return_void(),
-                Op::GetProperty { multiname, ic } => self.op_get_property(*multiname, ic),
-                Op::SetProperty { multiname, ic } => self.op_set_property(*multiname, ic),
+                Op::GetProperty { multiname, ic } => {
+                    self.op_get_property(*multiname, ic.borrow_mut().deref_mut())
+                }
+                Op::SetProperty { multiname, ic } => {
+                    self.op_set_property(*multiname, ic.borrow_mut().deref_mut())
+                }
                 Op::InitProperty { multiname } => self.op_init_property(*multiname),
                 Op::DeleteProperty { multiname } => self.op_delete_property(*multiname),
                 Op::GetSuper { multiname } => self.op_get_super(*multiname),

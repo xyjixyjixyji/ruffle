@@ -2,6 +2,7 @@ use crate::avm2::class::Class;
 use crate::avm2::multiname::Multiname;
 use crate::avm2::script::Script;
 use crate::string::AvmAtom;
+use std::cell::RefCell;
 
 use gc_arena::{Collect, Gc};
 use swf::avm2::types::{Exception, Index, LookupSwitch, Method, Namespace};
@@ -41,7 +42,7 @@ pub enum Op<'gc> {
 
         num_args: u32,
 
-        ic: Box<InlineCache<Property>>,
+        ic: RefCell<InlineCache<Property>>,
     },
     CallPropLex {
         multiname: Gc<'gc, Multiname<'gc>>,
@@ -154,7 +155,7 @@ pub enum Op<'gc> {
     },
     GetProperty {
         multiname: Gc<'gc, Multiname<'gc>>,
-        ic: Box<InlineCache<Property>>,
+        ic: RefCell<InlineCache<Property>>,
     },
     GetScopeObject {
         index: u8,
@@ -321,7 +322,7 @@ pub enum Op<'gc> {
     },
     SetProperty {
         multiname: Gc<'gc, Multiname<'gc>>,
-        ic: Box<InlineCache<Property>>,
+        ic: RefCell<InlineCache<Property>>,
     },
     SetSlot {
         // note: 0-indexed, as opposed to FP.

@@ -48,7 +48,7 @@ where
 impl<'gc> InlineCache<Property> {
     #[inline(always)]
     pub fn lookup_value_with_object<T>(
-        &mut self,
+        &self,
         object: T,
         activation: &mut Activation<'_, 'gc>,
     ) -> Result<Option<Value<'gc>>, Error<'gc>>
@@ -74,7 +74,7 @@ impl<'gc> InlineCache<Property> {
 
     #[inline(always)]
     pub fn call_function_with_object<T>(
-        &mut self,
+        &self,
         object: T,
         arguments: &[Value<'gc>],
         multiname: &Multiname<'gc>,

@@ -9,6 +9,7 @@ use crate::avm2::op::Op;
 use crate::avm2::script::TranslationUnit;
 use crate::avm2::{Activation, Error, QName};
 use crate::string::AvmAtom;
+use std::cell::RefCell;
 
 use gc_arena::{Collect, Gc};
 use std::collections::{HashMap, HashSet};
@@ -906,7 +907,7 @@ fn resolve_op<'gc>(
             Op::CallProperty {
                 multiname,
                 num_args,
-                ic: Box::new(InlineCache::new()),
+                ic: RefCell::new(InlineCache::new()),
             }
         }
         AbcOp::CallPropLex { index, num_args } => {
@@ -949,7 +950,7 @@ fn resolve_op<'gc>(
 
             Op::GetProperty {
                 multiname,
-                ic: Box::new(InlineCache::new()),
+                ic: RefCell::new(InlineCache::new()),
             }
         }
         AbcOp::SetProperty { index } => {
@@ -957,7 +958,7 @@ fn resolve_op<'gc>(
 
             Op::SetProperty {
                 multiname,
-                ic: Box::new(InlineCache::new()),
+                ic: RefCell::new(InlineCache::new()),
             }
         }
         AbcOp::InitProperty { index } => {
