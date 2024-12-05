@@ -620,6 +620,11 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             .map(|scope| scope.values())
     }
 
+    pub fn class_is_activation(&self, class: ClassObject<'gc>) -> bool {
+        self.activation_class
+            .map_or(false, |activation_class| class == activation_class)
+    }
+
     pub fn avm2(&mut self) -> &mut Avm2<'gc> {
         self.context.avm2
     }
